@@ -338,52 +338,6 @@ def write_daily_summary(project_root: Path, skill_name: str, report: dict, impro
         summary_path.write_text(header + entry, encoding="utf-8")
 
 
-# ── Cleanup ──
-
-
-def cleanup_merged_branches(project_root: Path) -> None:
-    """Delete local branches whose PRs are merged or closed."""
-    if not shutil.which("gh"):
-        return
-
-    result = subprocess.run(
-        ["git", "branch", "--list", "skill-improvement/*"],
-        cwd=project_root,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if result.returncode != 0:
-        return
-
-    for line in result.stdout.strip().splitlines():
-        branch = line.strip().lstrip("* ")
-        if not branch:
-            continue
-        pr_state = subprocess.run(
-            ["gh", "pr", "view", branch, "--json", "state"],
-            cwd=project_root,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if pr_state.returncode != 0:
-            continue
-        try:
-            data = json.loads(pr_state.stdout)
-            state = data.get("state", "").upper()
-            if state in ("MERGED", "CLOSED"):
-                subprocess.run(
-                    ["git", "branch", "-D", branch],
-                    cwd=project_root,
-                    capture_output=True,
-                    check=False,
-                )
-                logger.info("Deleted merged/closed branch: %s", branch)
-        except json.JSONDecodeError:
-            pass
-
-
 def rotate_logs(project_root: Path) -> None:
     """Remove log files older than LOG_RETENTION_DAYS."""
     log_dir = project_root / LOG_DIR
@@ -405,18 +359,17 @@ def rotate_logs(project_root: Path) -> None:
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Skill self-improvement orchestration loop")
+    parser = argparse.ArgumentParser(
+        description="Skill self-improvement loop — scores one skill per run and improves it locally"
+    )
     parser.add_argument("--project-root", default=".", help="Project root directory")
     parser.add_argument(
-        "--dry-run", action="store_true", help="Score only; skip improvement and PR creation"
-    )
-    parser.add_argument(
-        "--no-git", action="store_true", help="Bypass git dirty checks and write improvements locally without committing or opening PRs"
+        "--dry-run", action="store_true", help="Score only; skip improvement"
     )
     return parser.parse_args()
 
 
-def run(project_root: Path, dry_run: bool = False, no_git: bool = False) -> int:
+def run(project_root: Path, dry_run: bool = False) -> int:
     """Core orchestration logic, separated from CLI for testability."""
     log_dir = project_root / LOG_DIR
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -434,10 +387,6 @@ def run(project_root: Path, dry_run: bool = False, no_git: bool = False) -> int:
         return 0
 
     try:
-        # Git safety
-        if not dry_run and not no_git and not git_safe_check(project_root):
-            return 1
-
         # Discover and pick skill
         skills = discover_skills(project_root)
         if not skills:
@@ -452,7 +401,7 @@ def run(project_root: Path, dry_run: bool = False, no_git: bool = False) -> int:
 
         logger.info("Selected skill: %s", skill_name)
 
-        # Auto scoring (with LLM prompt emission)
+        # Auto scoring
         report = run_auto_score(project_root, skill_name, emit_prompt=True)
         if not report:
             logger.error("Auto scoring failed.")
@@ -466,11 +415,9 @@ def run(project_root: Path, dry_run: bool = False, no_git: bool = False) -> int:
         if llm_prompt_file and not dry_run:
             llm_result = run_llm_review(project_root, skill_name, llm_prompt_file)
             if llm_result:
-                # Write LLM review JSON and re-run with --llm-review-json
                 llm_json_path = project_root / "reports" / f"llm_review_{skill_name}.json"
                 llm_json_path.write_text(json.dumps(llm_result, indent=2), encoding="utf-8")
                 logger.info("LLM review score: %d", llm_result.get("score", 0))
-                # Re-score with LLM review merged
                 merged_report = run_auto_score(
                     project_root,
                     skill_name,
@@ -489,10 +436,9 @@ def run(project_root: Path, dry_run: bool = False, no_git: bool = False) -> int:
                 "Auto score %d below %d; attempting improvement.", final_score, SCORE_THRESHOLD
             )
             improvement_result = apply_improvement(
-                project_root, skill_name, report, dry_run=dry_run, no_git=no_git
+                project_root, skill_name, report, dry_run=dry_run
             )
             if isinstance(improvement_result, dict):
-                # Use post-improvement report for summary and state
                 report = improvement_result
                 final_score = report.get("auto_review", {}).get("score", final_score)
                 improved = True
@@ -503,10 +449,8 @@ def run(project_root: Path, dry_run: bool = False, no_git: bool = False) -> int:
                 SCORE_THRESHOLD,
             )
 
-        # Summary
+        # Summary + state
         write_daily_summary(project_root, skill_name, report, improved)
-
-        # State update
         state["history"].append(
             {
                 "skill": skill_name,
@@ -516,12 +460,7 @@ def run(project_root: Path, dry_run: bool = False, no_git: bool = False) -> int:
             }
         )
         save_state(project_root, state)
-
-        # Cleanup
-        if not dry_run and not no_git:
-            cleanup_merged_branches(project_root)
-            rotate_logs(project_root)
-
+        rotate_logs(project_root)
         return 0
 
     finally:
@@ -531,7 +470,7 @@ def run(project_root: Path, dry_run: bool = False, no_git: bool = False) -> int:
 def main() -> int:
     args = parse_args()
     project_root = Path(args.project_root).resolve()
-    return run(project_root, dry_run=args.dry_run, no_git=args.no_git)
+    return run(project_root, dry_run=args.dry_run)
 
 
 if __name__ == "__main__":

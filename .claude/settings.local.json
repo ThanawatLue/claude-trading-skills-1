@@ -22,7 +22,8 @@
       "Bash(git commit -m ' *)",
       "Bash(git push *)",
       "Bash(gh pr create --title 'fix\\(dashboard\\): target price anchoring, exposure enum, FMP API key override, and UX improvements' --body ' *)",
-      "Bash(python -c \"import os; t=os.environ.get\\('GITHUB_TOKEN',''\\); print\\('token_len='+str\\(len\\(t\\)\\)\\)\")"
+      "Bash(python -c \"import os; t=os.environ.get\\('GITHUB_TOKEN',''\\); print\\('token_len='+str\\(len\\(t\\)\\)\\)\")",
+      "Bash(python scripts/run_skill_improvement_loop.py --help)"
     ]
   }
 }
