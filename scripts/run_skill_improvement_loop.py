@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Skill self-improvement loop orchestrator.
 
-Picks the next skill, scores it with run_dual_axis_review.py,
-optionally invokes `claude -p` for LLM review and improvement,
-and opens a PR when the score is below threshold.
+Picks the next skill (round-robin), scores it with run_dual_axis_review.py,
+and uses Gemini to apply targeted improvements directly on disk.
+No git commits or PRs — all changes stay local.
 """
 
 from __future__ import annotations
@@ -64,88 +64,6 @@ def acquire_lock(project_root: Path) -> bool:
 def release_lock(project_root: Path) -> None:
     lock_path = project_root / LOCK_FILE
     lock_path.unlink(missing_ok=True)
-
-
-# ── Git safety ──
-
-
-_SAFE_DIRTY_PREFIXES = ("reports/", "logs/", "state/")
-
-
-def _is_safe_dirty_tree(porcelain_output: str) -> bool:
-    """Return True when all dirty files are in safe (non-source) directories.
-
-    Untracked files (??) are always blocked regardless of path.
-    Tracked changes (M/A/D/R etc.) are allowed only under reports/ or logs/.
-    """
-    for line in porcelain_output.splitlines():
-        if not line.strip():
-            continue
-        status_code = line[:2]
-        filepath = line[3:].strip().split(" -> ")[-1]  # handle renames
-        if status_code == "??":
-            # Allow untracked files under state/ (new thesis/journal files)
-            if not filepath.startswith("state/"):
-                logger.warning("Blocked: untracked file: %s", filepath)
-                return False
-        elif not filepath.startswith(_SAFE_DIRTY_PREFIXES):
-            logger.warning("Blocked: non-safe dirty file: %s", filepath)
-            return False
-    return True
-
-
-def git_safe_check(project_root: Path) -> bool:
-    """Verify working tree on main branch and pull latest.
-
-    Allows tracked changes in reports/ and logs/ to avoid blocking the
-    pipeline when only output files are dirty.
-    """
-    try:
-        status = subprocess.run(
-            ["git", "status", "--porcelain"],
-            cwd=project_root,
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        if status.stdout.strip():
-            if not _is_safe_dirty_tree(status.stdout):
-                logger.error("Working tree has non-safe dirty files. Aborting.")
-                return False
-            logger.info(
-                "Dirty tree contains only safe files, proceeding: %s",
-                [line[3:].strip() for line in status.stdout.strip().splitlines()],
-            )
-
-        branch = subprocess.run(
-            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-            cwd=project_root,
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        if branch.stdout.strip() != "main":
-            logger.error("Not on main branch (on '%s'). Aborting.", branch.stdout.strip())
-            return False
-
-        pull = subprocess.run(
-            ["git", "pull", "--ff-only"],
-            cwd=project_root,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if pull.returncode != 0:
-            logger.warning(
-                "git pull --ff-only failed; will retry next run. stderr: %s", pull.stderr.strip()
-            )
-            return False
-
-    except FileNotFoundError:
-        logger.error("git not found.")
-        return False
-
-    return True
 
 
 # ── State management ──
@@ -268,7 +186,7 @@ def run_llm_review(project_root: Path, skill_name: str, prompt_file: str) -> dic
     # but we force JSON mode in gemini_adapter.
     response_text = gemini_adapter.call_gemini(
         prompt_text,
-        model_name="gemini-3-flash-preview",
+        model_name="gemini-2.5-flash",
         response_mime_type="application/json"
     )
     
@@ -318,37 +236,7 @@ def _extract_json_from_claude(output: str, required_keys: list[str]) -> dict | N
     return None
 
 
-def _is_nothing_to_commit_output(output: str) -> bool:
-    """Return True when git commit output indicates no staged changes."""
-    text = output.lower()
-    return (
-        "nothing to commit" in text
-        or "no changes added to commit" in text
-        or "nothing added to commit" in text
-    )
-
-
 # ── Improvement ──
-
-
-def check_existing_pr(project_root: Path, branch_name: str) -> bool:
-    """Check if an open PR already exists for this branch."""
-    if not shutil.which("gh"):
-        return False
-    result = subprocess.run(
-        ["gh", "pr", "list", "--head", branch_name, "--state", "open", "--json", "number"],
-        cwd=project_root,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if result.returncode != 0:
-        return False
-    try:
-        prs = json.loads(result.stdout)
-        return len(prs) > 0
-    except json.JSONDecodeError:
-        return False
 
 
 def apply_improvement(
@@ -357,9 +245,10 @@ def apply_improvement(
     report: dict,
     dry_run: bool = False,
 ) -> dict | None:
-    """Create a branch, use claude to improve the skill, and open a PR.
+    """Apply targeted improvements to a skill directly on disk using Gemini.
 
     Returns the post-improvement report dict on success, or None on failure/dry-run.
+    No git operations — all changes are written locally.
     """
     if dry_run:
         logger.info(
@@ -369,278 +258,60 @@ def apply_improvement(
         )
         return None
 
-    if not shutil.which("claude"):
-        logger.warning("claude CLI not found; skipping improvement.")
-        return None
-    if not shutil.which("gh"):
-        logger.warning("gh CLI not found; skipping PR creation.")
-        return None
-
-    today = datetime.now().strftime("%Y-%m-%d")
-    branch_name = f"skill-improvement/{today}-{skill_name}"
-
-    if check_existing_pr(project_root, branch_name):
-        logger.info("Open PR already exists for %s; skipping.", branch_name)
-        return None
-
-    # Get pre-improvement auto score (use auto_review to avoid LLM merge bias)
     pre_score = report["auto_review"]["score"]
 
-    # Delete existing branch if present (from a previous failed run)
-    subprocess.run(
-        ["git", "branch", "-D", branch_name],
-        cwd=project_root,
-        capture_output=True,
-        check=False,
-    )
-
-    # Create branch
-    subprocess.run(
-        ["git", "checkout", "-b", branch_name],
-        cwd=project_root,
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-
-    try:
-        # Build improvement prompt
-        improvements = report["final_review"].get("improvement_items", [])
-        if not improvements:
-            logger.warning(
-                "No improvement_items for '%s' (score=%d); skipping to avoid unguided changes.",
-                skill_name,
-                pre_score,
-            )
-            _rollback(project_root, skill_name, branch_name)
-            return None
-        prompt = (
-            f"Improve the skill '{skill_name}' in skills/{skill_name}/ based on these findings:\n\n"
-            + "\n".join(f"- {item}" for item in improvements[:10])
-            + "\n\nMake minimal, targeted edits to address the findings. Do not change unrelated code."
+    improvements = report["final_review"].get("improvement_items", [])
+    if not improvements:
+        logger.warning(
+            "No improvement_items for '%s' (score=%d); skipping to avoid unguided changes.",
+            skill_name,
+            pre_score,
         )
-
-        success = gemini_adapter.run_gemini_agent(prompt, model_name="gemini-1.5-flash")
-        if not success:
-            logger.error("Gemini improvement agent failed.")
-            _rollback(project_root, skill_name, branch_name)
-            return None
-
-        # Quality gate: re-score (with tests enabled)
-        re_report = run_auto_score(project_root, skill_name, skip_tests=False)
-        if not re_report:
-            logger.error("Re-scoring failed after improvement; rolling back.")
-            _rollback(project_root, skill_name, branch_name)
-            return None
-
-        re_score = re_report.get("auto_review", {}).get("score", 0)
-        if re_score <= pre_score:
-            logger.warning(
-                "Re-score (%d) not better than pre-score (%d); rolling back.",
-                re_score,
-                pre_score,
-            )
-            _rollback(project_root, skill_name, branch_name)
-            return None
-
-        # Auto-fix lint issues before committing
-        if shutil.which("ruff"):
-            subprocess.run(
-                ["ruff", "check", "--fix", f"skills/{skill_name}/"],
-                cwd=project_root,
-                capture_output=True,
-                check=False,
-            )
-            subprocess.run(
-                ["ruff", "format", f"skills/{skill_name}/"],
-                cwd=project_root,
-                capture_output=True,
-                check=False,
-            )
-
-        # Stage files for commit
-        subprocess.run(
-            ["git", "add", f"skills/{skill_name}/"],
-            cwd=project_root,
-            check=True,
-            capture_output=True,
-        )
-
-        # Run pre-commit hooks to auto-fix whitespace/EOF issues
-        if shutil.which("pre-commit"):
-            staged = _get_staged_files(project_root, skill_name)
-            if staged:
-                pc_result = subprocess.run(
-                    ["pre-commit", "run", "--files"] + staged,
-                    cwd=project_root,
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                )
-                if pc_result.returncode != 0:
-                    logger.info("pre-commit auto-fixed files; re-staging.")
-                    subprocess.run(
-                        ["git", "add", f"skills/{skill_name}/"],
-                        cwd=project_root,
-                        check=True,
-                        capture_output=True,
-                    )
-                    # 2nd pass: verify auto-fixes resolved all issues
-                    staged2 = _get_staged_files(project_root, skill_name)
-                    if staged2:
-                        pc2 = subprocess.run(
-                            ["pre-commit", "run", "--files"] + staged2,
-                            cwd=project_root,
-                            capture_output=True,
-                            text=True,
-                            check=False,
-                        )
-                        if pc2.returncode != 0:
-                            logger.error(
-                                "pre-commit still failing after auto-fix; rolling back.\n"
-                                "stdout: %s\nstderr: %s",
-                                pc2.stdout.strip()[:500],
-                                pc2.stderr.strip()[:500] if pc2.stderr else "(empty)",
-                            )
-                            _rollback(project_root, skill_name, branch_name)
-                            return None
-
-        commit_msg = f"Improve {skill_name} skill (score {pre_score} -> {re_score})"
-        commit = subprocess.run(
-            ["git", "commit", "-m", commit_msg],
-            cwd=project_root,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if commit.returncode != 0:
-            commit_output = ((commit.stderr or "") + "\n" + (commit.stdout or "")).strip()
-            if _is_nothing_to_commit_output(commit_output):
-                logger.info(
-                    "No staged changes to commit for %s; rolling back no-op improvement branch.",
-                    skill_name,
-                )
-                _rollback(project_root, skill_name, branch_name)
-                return None
-            logger.error(
-                "git commit failed: %s", commit_output[:500] if commit_output else "(empty)"
-            )
-            _rollback(project_root, skill_name, branch_name)
-            return None
-
-        push = subprocess.run(
-            ["git", "push", "-u", "origin", branch_name],
-            cwd=project_root,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if push.returncode != 0:
-            logger.error("git push failed: %s", push.stderr.strip()[:200])
-            return None
-
-        pr_body = (
-            f"## Summary\n"
-            f"- Skill: `{skill_name}`\n"
-            f"- Score: {pre_score} -> {re_score}\n\n"
-            f"## Improvements\n"
-            + "\n".join(f"- {item}" for item in improvements[:10])
-            + "\n\nGenerated by skill self-improvement loop."
-        )
-        pr = subprocess.run(
-            [
-                "gh",
-                "pr",
-                "create",
-                "--head",
-                branch_name,
-                "--title",
-                f"Improve {skill_name} skill (score {pre_score} -> {re_score})",
-                "--body",
-                pr_body,
-            ],
-            cwd=project_root,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if pr.returncode != 0:
-            logger.error("gh pr create failed: %s", pr.stderr.strip()[:200])
-
-        return re_report
-
-    except subprocess.CalledProcessError as e:
-        stderr_text = e.stderr
-        if isinstance(stderr_text, bytes):
-            stderr_text = stderr_text.decode("utf-8", errors="replace")
-        logger.error(
-            "Subprocess failed during improvement: %s\nstderr: %s",
-            e,
-            stderr_text.strip()[:500] if stderr_text else "(empty)",
-        )
-        _rollback(project_root, skill_name, branch_name)
-        return None
-    except Exception:
-        logger.exception("Unexpected error during improvement.")
-        _rollback(project_root, skill_name, branch_name)
         return None
 
-    finally:
-        # Return to main
+    prompt = (
+        f"Improve the skill '{skill_name}' in skills/{skill_name}/ based on these findings:\n\n"
+        + "\n".join(f"- {item}" for item in improvements[:10])
+        + "\n\nMake minimal, targeted edits to address the findings. Do not change unrelated code."
+    )
+
+    success = gemini_adapter.run_gemini_agent(prompt, model_name="gemini-2.5-flash")
+    if not success:
+        logger.error("Gemini improvement agent failed.")
+        return None
+
+    # Quality gate: re-score after improvement
+    re_report = run_auto_score(project_root, skill_name, skip_tests=False)
+    if not re_report:
+        logger.error("Re-scoring failed after improvement.")
+        return None
+
+    re_score = re_report.get("auto_review", {}).get("score", 0)
+    if re_score <= pre_score:
+        logger.warning(
+            "Re-score (%d) not better than pre-score (%d). Files left on disk for manual inspection.",
+            re_score,
+            pre_score,
+        )
+        return None
+
+    # Auto-fix lint issues
+    if shutil.which("ruff"):
         subprocess.run(
-            ["git", "checkout", "main"],
+            ["ruff", "check", "--fix", f"skills/{skill_name}/"],
+            cwd=project_root,
+            capture_output=True,
+            check=False,
+        )
+        subprocess.run(
+            ["ruff", "format", f"skills/{skill_name}/"],
             cwd=project_root,
             capture_output=True,
             check=False,
         )
 
-
-def _rollback(project_root: Path, skill_name: str, branch_name: str) -> None:
-    """Roll back changes and return to main."""
-    subprocess.run(
-        ["git", "reset", "HEAD", "--", f"skills/{skill_name}/"],
-        cwd=project_root,
-        capture_output=True,
-        check=False,
-    )
-    subprocess.run(
-        ["git", "checkout", "--", f"skills/{skill_name}/"],
-        cwd=project_root,
-        capture_output=True,
-        check=False,
-    )
-    subprocess.run(
-        ["git", "clean", "-fd", f"skills/{skill_name}/"],
-        cwd=project_root,
-        capture_output=True,
-        check=False,
-    )
-    subprocess.run(
-        ["git", "checkout", "main"],
-        cwd=project_root,
-        capture_output=True,
-        check=False,
-    )
-    subprocess.run(
-        ["git", "branch", "-D", branch_name],
-        cwd=project_root,
-        capture_output=True,
-        check=False,
-    )
-
-
-def _get_staged_files(project_root: Path, skill_name: str) -> list[str]:
-    """Return list of staged files under the skill directory."""
-    result = subprocess.run(
-        ["git", "diff", "--cached", "--name-only", "--", f"skills/{skill_name}/"],
-        cwd=project_root,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if result.returncode != 0 or not result.stdout.strip():
-        return []
-    return [f.strip() for f in result.stdout.strip().splitlines() if f.strip()]
+    logger.info("Successfully improved skill '%s' (score %d -> %d)!", skill_name, pre_score, re_score)
+    return re_report
 
 
 # ── Summary ──
@@ -739,10 +410,13 @@ def parse_args():
     parser.add_argument(
         "--dry-run", action="store_true", help="Score only; skip improvement and PR creation"
     )
+    parser.add_argument(
+        "--no-git", action="store_true", help="Bypass git dirty checks and write improvements locally without committing or opening PRs"
+    )
     return parser.parse_args()
 
 
-def run(project_root: Path, dry_run: bool = False) -> int:
+def run(project_root: Path, dry_run: bool = False, no_git: bool = False) -> int:
     """Core orchestration logic, separated from CLI for testability."""
     log_dir = project_root / LOG_DIR
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -761,7 +435,7 @@ def run(project_root: Path, dry_run: bool = False) -> int:
 
     try:
         # Git safety
-        if not dry_run and not git_safe_check(project_root):
+        if not dry_run and not no_git and not git_safe_check(project_root):
             return 1
 
         # Discover and pick skill
@@ -815,7 +489,7 @@ def run(project_root: Path, dry_run: bool = False) -> int:
                 "Auto score %d below %d; attempting improvement.", final_score, SCORE_THRESHOLD
             )
             improvement_result = apply_improvement(
-                project_root, skill_name, report, dry_run=dry_run
+                project_root, skill_name, report, dry_run=dry_run, no_git=no_git
             )
             if isinstance(improvement_result, dict):
                 # Use post-improvement report for summary and state
@@ -844,7 +518,7 @@ def run(project_root: Path, dry_run: bool = False) -> int:
         save_state(project_root, state)
 
         # Cleanup
-        if not dry_run:
+        if not dry_run and not no_git:
             cleanup_merged_branches(project_root)
             rotate_logs(project_root)
 
@@ -857,7 +531,7 @@ def run(project_root: Path, dry_run: bool = False) -> int:
 def main() -> int:
     args = parse_args()
     project_root = Path(args.project_root).resolve()
-    return run(project_root, dry_run=args.dry_run)
+    return run(project_root, dry_run=args.dry_run, no_git=args.no_git)
 
 
 if __name__ == "__main__":

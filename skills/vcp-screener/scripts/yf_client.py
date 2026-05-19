@@ -139,11 +139,11 @@ class YFClient:
     def get_thai_constituents(self, index: str = "SET50") -> Optional[list[dict]]:
         set50_symbols = [
             "ADVANC", "AOT", "AWC", "BANPU", "BBL", "BCP", "BDMS", "BEM", "BGRIM",
-            "BH", "BJC", "BLA", "BTS", "CBG", "CENTEL", "COM7", "CPALL", "CPF",
-            "CPN", "CRC", "DELTA", "EA", "EGCO", "GLOBAL", "GULF", "GUNKUL", "HANA",
-            "HMPRO", "INTUCH", "IRPC", "IVL", "JMART", "JMT", "KBANK", "KCE", "KTB",
-            "KTC", "LH", "MINT", "MTC", "OR", "OSP", "PTT", "PTTEP", "PTTGC", "RATCH",
-            "SAWAD", "SCB", "SCC", "SCGP", "TCAP", "TISCO", "TOP", "TRUE", "TTB", "TU", "WHA",
+            "BH", "BTS", "CBG", "CENTEL", "COM7", "CPALL", "CPF", "CPN", "CRC",
+            "DELTA", "EA", "EGCO", "GLOBAL", "GULF", "HANA", "HMPRO", "INTUCH",
+            "IRPC", "IVL", "KBANK", "KCE", "KTB", "KTC", "LH", "MINT", "MTC",
+            "OR", "OSP", "PTT", "PTTEP", "PTTGC", "SAWAD", "SCB", "SCC", "SCGP",
+            "TISCO", "TOP", "TRUE", "TTB", "TU", "WHA",
         ]
         constituents = [
             {"symbol": f"{sym}.BK", "name": sym, "sector": "SET50", "subSector": "Thai Stock"}

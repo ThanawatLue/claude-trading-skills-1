@@ -35,7 +35,7 @@ def _get_client():
 
 def call_gemini(
     prompt: str,
-    model_name: str = "gemini-3-flash-preview",
+    model_name: str = "gemini-2.5-flash",
     temperature: float = 0.2,
     max_output_tokens: int = 8192,
     response_mime_type: str = "text/plain",
@@ -135,7 +135,7 @@ _TOOL_MAP = {
 
 def run_gemini_agent(
     prompt: str,
-    model_name: str = "gemini-3-flash-preview",
+    model_name: str = "gemini-2.5-flash",
     max_turns: int = 10,
 ) -> bool:
     """Run a Gemini agentic loop with file tools.
@@ -202,7 +202,12 @@ def run_gemini_agent(
     contents = [{"role": "user", "parts": [{"text": prompt}]}]
 
     try:
+        import time
         for turn in range(max_turns):
+            if turn > 0:
+                logger.info("Rate limit safety: sleeping 6.5 seconds before turn %d...", turn + 1)
+                time.sleep(6.5)
+
             response = client.models.generate_content(
                 model=model_name,
                 contents=contents,

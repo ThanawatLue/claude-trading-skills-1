@@ -903,7 +903,7 @@ def update_index_pages(
         data = parse_skill_md(d / "SKILL.md")
         all_skills.append((d.name, data, api_reqs.get(d.name)))
 
-    for lang in ("en", "ja"):
+    for lang in ("en",):
         index_path = docs_dir / lang / "skills" / "index.md"
         if not index_path.exists():
             continue
@@ -1028,7 +1028,7 @@ def update_catalog_api_matrix(
     all_skills: list[tuple[str, dict, dict | None]],
 ) -> None:
     """Add missing skills to the API Requirements Matrix in catalog pages."""
-    for lang in ("en", "ja"):
+    for lang in ("en",):
         catalog_path = docs_dir / lang / "skill-catalog.md"
         if not catalog_path.exists():
             continue
@@ -1163,9 +1163,7 @@ def main(argv: list[str] | None = None) -> int:
         skill_dirs = [args.skills_dir / args.skill]
 
     en_dir = args.docs_dir / "en" / "skills"
-    ja_dir = args.docs_dir / "ja" / "skills"
     en_dir.mkdir(parents=True, exist_ok=True)
-    ja_dir.mkdir(parents=True, exist_ok=True)
 
     # Assign nav_orders: existing hand-written keep 1-10, new start at 11+
     new_skills = []
@@ -1195,7 +1193,6 @@ def main(argv: list[str] | None = None) -> int:
             continue
 
         en_path = en_dir / f"{name}.md"
-        ja_path = ja_dir / f"{name}.md"
 
         if en_path.exists() and not args.overwrite:
             skipped += 1
@@ -1218,15 +1215,6 @@ def main(argv: list[str] | None = None) -> int:
                 resources,
                 skill_packages_dir=skill_packages_dir,
             )
-            ja_content = generate_ja_full_page(
-                name,
-                skill_data,
-                api_info,
-                cli_example,
-                nav_order,
-                resources,
-                skill_packages_dir=skill_packages_dir,
-            )
         else:
             # Generate 6-section auto pages
             en_content = generate_en_page(
@@ -1238,23 +1226,13 @@ def main(argv: list[str] | None = None) -> int:
                 resources,
                 skill_packages_dir=skill_packages_dir,
             )
-            ja_content = generate_ja_page(
-                name,
-                skill_data,
-                api_info,
-                nav_order,
-                skill_packages_dir=skill_packages_dir,
-            )
 
         en_path.write_text(en_content, encoding="utf-8")
         generated_en += 1
 
-        ja_path.write_text(ja_content, encoding="utf-8")
-        generated_ja += 1
+        print(f"  Generated: {name} (EN, mode={args.mode})")
 
-        print(f"  Generated: {name} (EN + JA, mode={args.mode})")
-
-    print(f"\nDone: {generated_en} EN + {generated_ja} JA generated, {skipped} skipped")
+    print(f"\nDone: {generated_en} EN generated, {skipped} skipped")
 
     # Update index pages with current skill table
     update_index_pages(args.skills_dir, args.docs_dir, api_reqs)

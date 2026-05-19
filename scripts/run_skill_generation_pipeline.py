@@ -361,6 +361,11 @@ def _is_safe_dirty_tree(porcelain_output: str) -> bool:
             continue
         status_code = line[:2]
         filepath = line[3:].strip().split(" -> ")[-1]  # handle renames
+        
+        # Safe exceptions: local IDE/tool settings and files
+        if filepath.startswith((".claude/", ".vscode/", ".git", ".idea/")):
+            continue
+            
         if status_code == "??":
             # Allow untracked files under state/ (new thesis/journal files)
             if not filepath.startswith("state/"):

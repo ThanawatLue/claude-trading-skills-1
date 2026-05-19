@@ -17,6 +17,9 @@ Analyze recent post-earnings stocks using a 5-factor weighted scoring system to 
 ## Prerequisites
 
 - FMP API key (set `FMP_API_KEY` environment variable or pass `--api-key`)
+  ```bash
+  export FMP_API_KEY=YOUR_API_KEY_HERE
+  ```
 - Free tier (250 calls/day) is sufficient for default screening (lookback 2 days, top 20)
 - Paid tier recommended for larger lookback windows or full screening
 
