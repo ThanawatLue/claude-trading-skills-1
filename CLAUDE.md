@@ -53,6 +53,53 @@ Each skill follows a standardized directory structure:
 - Reports use structured templates from `assets/` directories
 - Scripts should default `--output-dir` to `reports/` (or pass `--output-dir reports/` when invoking)
 
+### Other Repository Directories
+
+| Directory | Purpose |
+|-----------|---------|
+| `agents/` | Agent definitions (multi-step orchestrators using Claude Agent SDK) |
+| `commands/` | Slash-command definitions for Claude Code sessions |
+| `dashboard/` | Flask + Lightweight Charts dashboard for visualizing skill outputs |
+| `workflows/` | Canonical YAML manifests for multi-skill operational procedures |
+| `skill-packages/` | Pre-built `.skill` ZIP archives for Claude web app upload |
+| `launchd/` | macOS launch daemon plists for automated daily/weekly pipeline runs |
+| `state/` | Runtime state and caching for trader-memory-core and edge pipeline |
+
+**`skills-index.yaml`** (root) is the authoritative metadata registry for all skills — `integrations[]`, `inputs`, `outputs`, `workflows` back-references, and `hand_written_doc` flag all live here. The API Requirements Matrix in README and skill catalog are auto-generated from this file; edit the index rather than the generated sections.
+
+## Development Commands
+
+This project uses [`uv`](https://docs.astral.sh/uv/) as the package manager.
+
+```bash
+# First-time setup
+uv sync --extra dev
+pre-commit install && pre-commit install --hook-type pre-push
+
+# Run all tests (uses testpaths from pyproject.toml)
+uv run pytest
+
+# Run a single skill's tests
+uv run pytest skills/<skill-name>/scripts/tests/ -v
+
+# Run tests with coverage report
+uv run pytest --cov --cov-report=term-missing
+
+# Lint and auto-fix Python code
+uv run ruff check skills/ scripts/ --fix
+uv run ruff format skills/ scripts/
+
+# Validate skills-index.yaml against skills/ directory
+python3 scripts/validate_skills_index.py
+
+# Run all pre-commit checks manually (without committing)
+pre-commit run --all-files
+```
+
+Two skill test suites are intentionally excluded from `pyproject.toml` `testpaths`:
+- `canslim-screener` — requires optional `bs4` dependency
+- `theme-detector` — 27+ pre-existing failures
+
 ## Common Development Tasks
 
 ### Creating a New Skill

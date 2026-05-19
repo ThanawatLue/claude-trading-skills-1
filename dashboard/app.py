@@ -5,6 +5,8 @@ import os
 import sqlite3
 import subprocess
 import sys
+import concurrent.futures
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -36,7 +38,7 @@ CREATE INDEX IF NOT EXISTS idx_run_market_at ON analysis_run(market, run_at DESC
 
 def _db() -> sqlite3.Connection:
     Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    conn = sqlite3.connect(DB_PATH, timeout=60.0, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")
@@ -46,7 +48,7 @@ def _db() -> sqlite3.Connection:
 
 def db_save_run(market: str, data: dict) -> str:
     """Save a full analysis snapshot to DB. Returns the run_at timestamp."""
-    run_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+    run_at = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     with _db() as conn:
         conn.execute(
             "INSERT INTO analysis_run (market, run_at, data) VALUES (?,?,?)",
@@ -146,7 +148,90 @@ def _collect_snapshot(market: str) -> dict:
     }
 
 
-# ── Routes ─────────────────────────────────────────────────────────────────────
+def cleanup_old_files(keep_count: int = 2):
+    """Keep only the latest keep_count files matching each analysis output pattern."""
+    patterns = [
+        # Root directory patterns
+        os.path.join(ROOT_DIR, "market_breadth_20[0-9][0-9]-*.json"),
+        os.path.join(ROOT_DIR, "market_breadth_20[0-9][0-9]-*.md"),
+        # Reports directory patterns
+        os.path.join(REPORTS_DIR, "vcp_screener_*.json"),
+        os.path.join(REPORTS_DIR, "vcp_screener_*.md"),
+        os.path.join(REPORTS_DIR, "exposure_posture_*.json"),
+        os.path.join(REPORTS_DIR, "exposure_posture_*.md"),
+        os.path.join(REPORTS_DIR, "ibd_distribution_day_monitor_*.json"),
+        os.path.join(REPORTS_DIR, "ibd_distribution_day_monitor_*.md"),
+        os.path.join(REPORTS_DIR, "earnings_trade_*.json"),
+        os.path.join(REPORTS_DIR, "earnings_trade_*.md"),
+        os.path.join(REPORTS_DIR, "breakout_trade_plan_*.json"),
+        os.path.join(REPORTS_DIR, "breakout_trade_plan_*.md"),
+        os.path.join(REPORTS_DIR, "uptrend_analysis_*.json"),
+        os.path.join(REPORTS_DIR, "uptrend_analysis_*.md"),
+        os.path.join(REPORTS_DIR, "downtrend_analysis_*.json"),
+        os.path.join(REPORTS_DIR, "downtrend_analysis_*.md"),
+        os.path.join(REPORTS_DIR, "canslim_screener_*.json"),
+        os.path.join(REPORTS_DIR, "canslim_screener_*.md"),
+        os.path.join(REPORTS_DIR, "skill_review_*.json"),
+        os.path.join(REPORTS_DIR, "skill_review_*.md"),
+    ]
+    for pattern in patterns:
+        files = sorted(glob.glob(pattern), reverse=True)
+        if len(files) > keep_count:
+            for f in files[keep_count:]:
+                try:
+                    os.remove(f)
+                except Exception as e:
+                    print(f"Error removing {f}: {e}", file=sys.stderr)
+
+
+def clean_unsuccessful_db_runs():
+    """Scan SQLite analysis_run table and remove runs that are unsuccessful or incomplete."""
+    try:
+        db_path = DB_PATH
+        if not os.path.exists(db_path):
+            return
+        
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        rows = cursor.execute("SELECT id, market, run_at, data FROM analysis_run").fetchall()
+        to_delete = []
+        
+        for row in rows:
+            run_id = row["id"]
+            try:
+                data = json.loads(row["data"])
+            except Exception:
+                to_delete.append(run_id)
+                continue
+                
+            breadth = data.get("breadth")
+            vcp = data.get("vcp")
+            exposure = data.get("exposure")
+            
+            is_unsuccessful = False
+            if not breadth or not isinstance(breadth, dict) or not breadth.get("composite"):
+                is_unsuccessful = True
+            elif not vcp or not isinstance(vcp, dict):
+                is_unsuccessful = True
+            elif not exposure or not isinstance(exposure, dict) or not exposure.get("recommendation"):
+                is_unsuccessful = True
+                
+            if is_unsuccessful:
+                to_delete.append(run_id)
+                
+        if to_delete:
+            cursor.execute(
+                f"DELETE FROM analysis_run WHERE id IN ({','.join(map(str, to_delete))})"
+            )
+            conn.commit()
+            print(f"Cleaned up {len(to_delete)} unsuccessful/incomplete runs from database.", file=sys.stderr)
+            
+        conn.close()
+    except Exception as e:
+        print(f"Error during DB cleaning: {e}", file=sys.stderr)
+
 
 @app.route("/")
 def index():
@@ -191,14 +276,6 @@ def api_run():
     risk_pct = request.args.get("risk_pct", "0.5")
     target_r = request.args.get("target_r", "2.0")
 
-    scripts = [
-        [sys.executable,
-         os.path.join(BASE_DIR, "skills", "market-breadth-analyzer", "scripts", "market_breadth_analyzer.py"),
-         "--market", market],
-        [sys.executable,
-         os.path.join(BASE_DIR, "skills", "vcp-screener", "scripts", "screen_vcp.py"),
-         "--market", market, "--max-candidates", "50", "--top", "50"],
-    ]
     log = []
 
     def _run(cmd, timeout=300, extra_env=None):
@@ -207,79 +284,96 @@ def api_run():
             r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
                                errors="replace", cwd=BASE_DIR, timeout=timeout, env=env)
             return {"cmd": os.path.basename(cmd[1]), "ok": r.returncode == 0,
-                    "out": r.stdout[-500:], "err": r.stderr[-400:]}
+                    "out": r.stdout[-1000:], "err": r.stderr[-1500:]}
         except subprocess.TimeoutExpired:
             return {"cmd": os.path.basename(cmd[1]), "ok": False,
                     "out": "", "err": f"Timeout after {timeout}s"}
         except Exception as e:
             return {"cmd": os.path.basename(cmd[1]), "ok": False, "out": "", "err": str(e)}
 
-    for cmd in scripts:
-        log.append(_run(cmd, timeout=300))
+    # ── Phase 1: Heavy Primary Scanners (Parallel Execution) ──────────────────────
+    primary_tasks = [
+        # 1. Market Breadth Analyzer
+        ([sys.executable, os.path.join(BASE_DIR, "skills", "market-breadth-analyzer", "scripts", "market_breadth_analyzer.py"), "--market", market], 300, None),
+        # 2. VCP Screener
+        ([sys.executable, os.path.join(BASE_DIR, "skills", "vcp-screener", "scripts", "screen_vcp.py"), "--market", market, "--max-candidates", "50", "--top", "50"], 300, None),
+        # 3. Uptrend Analyzer
+        ([sys.executable, os.path.join(BASE_DIR, "skills", "uptrend-analyzer", "scripts", "uptrend_analyzer.py"), "--output-dir", REPORTS_DIR], 120, None),
+        # 4. Downtrend Duration Analyzer
+        ([sys.executable, os.path.join(BASE_DIR, "skills", "downtrend-duration-analyzer", "scripts", "analyze_downtrends.py"), "--max-stocks", "100", "--output-dir", REPORTS_DIR], 300, None)
+    ]
 
-    # Exposure Coach — uses fresh breadth for this market
+    if market == "US":
+        primary_tasks.extend([
+            # 5. IBD Distribution Day Monitor
+            ([sys.executable, os.path.join(BASE_DIR, "skills", "ibd-distribution-day-monitor", "scripts", "ibd_monitor.py"), "--output-dir", REPORTS_DIR], 60, None),
+            # 6. Earnings Trade Analyzer
+            ([sys.executable, os.path.join(BASE_DIR, "skills", "earnings-trade-analyzer", "scripts", "analyze_earnings_trades.py"), "--output-dir", REPORTS_DIR], 600, None),
+            # 7. CANSLIM Screener
+            ([sys.executable, os.path.join(BASE_DIR, "skills", "canslim-screener", "scripts", "screen_canslim.py"), "--max-candidates", "40", "--top", "40", "--output-dir", REPORTS_DIR], 300, None)
+        ])
+
+    print(f"Starting Phase 1 parallel execution with {len(primary_tasks)} independent scanners...", file=sys.stderr)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(primary_tasks)) as executor:
+        futures = {
+            executor.submit(_run, cmd, timeout, env): cmd
+            for cmd, timeout, env in primary_tasks
+        }
+        for future in concurrent.futures.as_completed(futures):
+            log.append(future.result())
+
+    # ── Phase 2: Dependent Planners (Parallel Execution) ─────────────────────────
     latest_mb = latest_file(os.path.join(ROOT_DIR, "market_breadth_20[0-9][0-9]-*.json"), market)
-    log.append(_run([
-        sys.executable,
-        os.path.join(BASE_DIR, "skills", "exposure-coach", "scripts", "calculate_exposure.py"),
-        "--breadth", latest_mb or "",
-    ], timeout=60))
+    latest_vcp = latest_file(os.path.join(REPORTS_DIR, "vcp_screener_*.json"), market)
 
-    if market == "US":
-        log.append(_run([
-            sys.executable,
-            os.path.join(BASE_DIR, "skills", "ibd-distribution-day-monitor", "scripts", "ibd_monitor.py"),
-            "--output-dir", REPORTS_DIR,
-        ], timeout=60))
+    dependent_tasks = [
+        # 1. Exposure Coach (needs fresh market breadth output)
+        ([sys.executable, os.path.join(BASE_DIR, "skills", "exposure-coach", "scripts", "calculate_exposure.py"), "--breadth", latest_mb or ""], 60, None)
+    ]
 
-        log.append(_run([
-            sys.executable,
-            os.path.join(BASE_DIR, "skills", "earnings-trade-analyzer", "scripts", "analyze_earnings_trades.py"),
-            "--output-dir", REPORTS_DIR,
-        ], timeout=600, extra_env={"FMP_API_KEY": ""}))
+    if latest_vcp:
+        dependent_tasks.append(
+            # 2. Breakout Trade Planner (needs fresh VCP screener output)
+            ([sys.executable, os.path.join(BASE_DIR, "skills", "breakout-trade-planner", "scripts", "plan_breakout_trades.py"),
+              "--input", latest_vcp, "--account-size", account_size, "--risk-pct", risk_pct, "--target-r-multiple", target_r, "--output-dir", REPORTS_DIR], 60, None)
+        )
 
-        latest_vcp = latest_file(os.path.join(REPORTS_DIR, "vcp_screener_*.json"), market)
-        if latest_vcp:
-            log.append(_run([
-                sys.executable,
-                os.path.join(BASE_DIR, "skills", "breakout-trade-planner", "scripts", "plan_breakout_trades.py"),
-                "--input", latest_vcp,
-                "--account-size", account_size,
-                "--risk-pct", risk_pct,
-                "--target-r-multiple", target_r,
-                "--output-dir", REPORTS_DIR,
-            ], timeout=60))
-        else:
-            log.append({"cmd": "plan_breakout_trades.py", "ok": False,
-                        "out": "", "err": "No VCP screener output found"})
+    print(f"Starting Phase 2 parallel execution with {len(dependent_tasks)} dependent planners...", file=sys.stderr)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(dependent_tasks)) as executor:
+        futures = {
+            executor.submit(_run, cmd, timeout, env): cmd
+            for cmd, timeout, env in dependent_tasks
+        }
+        for future in concurrent.futures.as_completed(futures):
+            log.append(future.result())
 
-    if market == "US":
-        # CANSLIM Screener — uses yfinance auto-detected (no FMP key)
-        canslim_script = os.path.join(
-            BASE_DIR, "skills", "canslim-screener", "scripts", "screen_canslim.py")
-        log.append(_run([
-            sys.executable, canslim_script,
-            "--max-candidates", "40", "--top", "40",
-            "--output-dir", REPORTS_DIR,
-        ], timeout=300, extra_env={"FMP_API_KEY": ""}))
+    if not latest_vcp:
+        log.append({"cmd": "plan_breakout_trades.py", "ok": False,
+                    "out": "", "err": "No VCP screener output found"})
 
-    log.append(_run([
-        sys.executable,
-        os.path.join(BASE_DIR, "skills", "uptrend-analyzer", "scripts", "uptrend_analyzer.py"),
-        "--output-dir", REPORTS_DIR,
-    ], timeout=120))
-
-    log.append(_run([
-        sys.executable,
-        os.path.join(BASE_DIR, "skills", "downtrend-duration-analyzer", "scripts", "analyze_downtrends.py"),
-        "--max-stocks", "100", "--output-dir", REPORTS_DIR,
-    ], timeout=300))
-
-    # Save snapshot to DB (even if some scripts failed — partial data is still useful)
+    # Save snapshot to DB if successful
     snapshot = _collect_snapshot(market)
-    run_at = db_save_run(market, snapshot)
+    
+    # Verify if the run was successful (must have valid breadth and vcp data)
+    breadth = snapshot.get("breadth")
+    vcp = snapshot.get("vcp")
+    is_success = (
+        breadth and isinstance(breadth, dict) and breadth.get("composite") and
+        vcp and isinstance(vcp, dict)
+    )
+    
+    if is_success:
+        run_at = db_save_run(market, snapshot)
+        status = "success"
+    else:
+        run_at = None
+        status = "failed"
+        print(f"Warning: Run at {datetime.now().isoformat()} was unsuccessful and not saved to DB.", file=sys.stderr)
+        
+    cleanup_old_files(keep_count=2)
+    clean_unsuccessful_db_runs()
 
-    return jsonify({"status": "success", "market": market, "run_at": run_at, "log": log})
+    return jsonify({"status": status, "market": market, "run_at": run_at, "log": log})
 
 
 @app.route("/api/history/<symbol>")
@@ -310,6 +404,7 @@ def api_history(symbol):
 def api_db_stats():
     """Return DB stats: run counts, date ranges per market."""
     try:
+        clean_unsuccessful_db_runs()
         with _db() as conn:
             rows = conn.execute("""
                 SELECT market,
@@ -336,4 +431,6 @@ def api_db_stats():
 
 
 if __name__ == "__main__":
+    cleanup_old_files(keep_count=2)
+    clean_unsuccessful_db_runs()
     app.run(debug=True, port=5050)

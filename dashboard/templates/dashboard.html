@@ -130,6 +130,19 @@ th.sort-desc::after{content:'↓';opacity:1;color:var(--cyan)}
 .dt-stat{background:var(--bg3);border-radius:8px;padding:12px;text-align:center}
 .dt-stat .val{font-size:1.4rem;font-weight:800;font-family:'JetBrains Mono',monospace;color:var(--orange)}
 .dt-stat .lbl{font-size:.6rem;color:var(--muted);text-transform:uppercase;margin-top:2px}
+
+/* AI Control Center Custom CSS */
+#mkt-AI.active {
+  background: var(--purple) !important;
+  color: #fff !important;
+  border-color: var(--purple) !important;
+  box-shadow: 0 0 15px rgba(168,85,247,0.4) !important;
+}
+@keyframes pulse {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0,230,118, 0.7); }
+  70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(0,230,118, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0,230,118, 0); }
+}
 </style>
 </head>
 <body>
@@ -161,7 +174,7 @@ th.sort-desc::after{content:'↓';opacity:1;color:var(--cyan)}
   </div>
   <div class="settings-label-group">
     <label>Risk / Trade (%)</label>
-    <input class="settings-input" type="number" id="settingRisk" value="0.5" min="0.1" max="5" step="0.1" onchange="saveSettings()">
+    <input class="settings-input" type="number" id="settingRisk" value="0.5" min="0.1" max="8" step="0.1" onchange="saveSettings()">
   </div>
   <div class="settings-label-group">
     <label>Target R-Multiple</label>
@@ -185,7 +198,8 @@ th.sort-desc::after{content:'↓';opacity:1;color:var(--cyan)}
   </div>
 </div>
 
-<!-- STEP 1: MARKET BREADTH + UPTREND ANALYZER -->
+<div id="mainDashboard">
+  <!-- STEP 1: MARKET BREADTH ANALYSIS -->
 <div class="section-title">📊 สเต็ป 1 — สุขภาพตลาด (Market Breadth + Uptrend Ratio) <button class="guide-btn" onclick="showLegend('breadth')">📖 คู่มือ</button></div>
 <div class="grid3">
   <div class="card">
@@ -239,8 +253,8 @@ th.sort-desc::after{content:'↓';opacity:1;color:var(--cyan)}
 <div class="card">
   <div class="card-title">ผลสแกนหุ้น</div>
   <div style="display:flex;justify-content:space-between;margin-bottom:16px;gap:12px">
-    <input type="text" id="vcpSearch" placeholder="🔍 ค้นหา Ticker หรือชื่อหุ้น..." oninput="updateVCP()" style="flex:1;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:10px 15px;border-radius:10px">
-    <div style="display:flex;gap:10px">
+    <input type="text" id="vcpSearch" placeholder="🔍 ค้นหา Ticker / ชื่อหุ้น / Sector..." oninput="updateVCP()" style="flex:1;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:10px 15px;border-radius:10px">
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
       <select id="vcpStateFilter" onchange="updateVCP()" style="background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:10px;border-radius:10px">
         <option value="">ทุก State</option>
         <option value="Pre-breakout">🟢 Pre-breakout</option>
@@ -249,6 +263,9 @@ th.sort-desc::after{content:'↓';opacity:1;color:var(--cyan)}
         <option value="Overextended">🔴 Overextended</option>
         <option value="Damaged">🔴 Damaged</option>
       </select>
+      <input type="number" id="vcpMinScore" value="0" min="0" max="100" step="5" oninput="updateVCP()"
+        placeholder="Min Score" title="Score ขั้นต่ำ (0 = ทั้งหมด)"
+        style="background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:10px;border-radius:10px;width:90px;font-family:'JetBrains Mono',monospace">
       <select id="vcpLimit" onchange="updateVCP()" style="background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:10px;border-radius:10px">
         <option value="10">10 ตัวแรก</option>
         <option value="999" selected>ทั้งหมด</option>
@@ -263,15 +280,26 @@ th.sort-desc::after{content:'↓';opacity:1;color:var(--cyan)}
           <th class="sortable" onclick="setSort('composite_score')">Score</th>
           <th class="sortable" onclick="setSort('price')">Price</th>
           <th class="sortable" onclick="setSort('pivot_price')">Pivot 🏆</th>
+          <th>Stop Loss 🔴</th>
+          <th>Target 🎯</th>
           <th class="sortable" onclick="setSort('execution_state')">State</th>
           <th class="sortable" onclick="setSort('trend_score')">Trend</th>
           <th class="sortable" onclick="setSort('rs_rank_estimate')" title="RS Percentile vs S&P500 (O'Neil method) — ≥80 = Market Leader">RS% 📈</th>
           <th class="sortable" onclick="setSort('atr_value')" title="Average True Range — ความกว้าง daily range ปกติของหุ้น">ATR 📊</th>
+          <th class="sortable" onclick="setSort('distance_pct')" title="% ห่างจาก Pivot ยิ่งน้อยยิ่งดี — ≤2% = ใกล้มาก">Dist% 🎯</th>
+          <th title="จำนวน Contractions — Ideal: 2-4">Con</th>
           <th>Quality</th>
         </tr>
       </thead>
       <tbody id="vcpTbody"></tbody>
     </table>
+  </div>
+  <div class="logic-box" style="margin-top:12px">
+    <strong>วิธีอ่าน:</strong> 
+    <span style="color:var(--green)">Score ≥70</span> = Strong VCP Setup | 
+    <span style="color:var(--gold)">Score 50-70</span> = Setup กำลังฟอร์มตัว | 
+    <span style="color:var(--cyan)">RS Rank ≥80</span> = หุ้นนำตลาด | 
+    <span style="color:var(--orange)">ATR (%)</span> = ความผันผวน (ควรน้อยกว่า 4-5% เพื่อความปลอดภัย)
   </div>
 </div>
 
@@ -281,7 +309,7 @@ th.sort-desc::after{content:'↓';opacity:1;color:var(--cyan)}
   <div id="canslimContent" style="color:var(--muted);font-size:.85rem">⚠️ ยังไม่มีข้อมูล CANSLIM — กรุณากด Run Fresh Analysis</div>
 </div>
 
-<!-- STEP 5: BREAKOUT TRADE PLANNER (US only) -->
+<!-- STEP 5: BREAKOUT TRADE PLANNER -->
 <div class="section-title" id="breakoutSection">🎯 สเต็ป 5 — Breakout Trade Plan (ซื้อ/ขาย ราคาเท่าไหร่?) <button class="guide-btn" onclick="showLegend('breakout')">📖 คู่มือ</button></div>
 <div class="card" id="breakoutCard">
   <div id="breakoutContent" style="color:var(--muted);font-size:.85rem">⚠️ ยังไม่มีแผนการซื้อขาย — กรุณากด Run Fresh Analysis (ต้องรัน VCP ก่อน)</div>
@@ -298,6 +326,9 @@ th.sort-desc::after{content:'↓';opacity:1;color:var(--cyan)}
 <div class="card" id="earnCard">
   <div id="earnContent" style="color:var(--muted);font-size:.85rem">⚠️ ยังไม่มีข้อมูล Earnings — กรุณากด Run Fresh Analysis</div>
 </div>
+
+</div> <!-- mainDashboard end -->
+
 
 <div id="toast"></div>
 
@@ -339,77 +370,85 @@ const LEGENDS = {
       <div class="legend-row"><div class="legend-symbol"><span class="risk-SEVERE">SEVERE</span></div><div class="legend-desc">ขายออก รอ Follow-Through Day</div></div>
     </div>`
   },
+  breadth: {
+    title: '📊 คู่มือ: Market Breadth Analysis',
+    html: `<div class="legend-section">
+      <h3>Theory: Stan Weinstein's Stage Analysis</h3>
+      <p style="font-size:.8rem;color:var(--muted)">วิเคราะห์สุขภาพตลาดโดยดูจาก "จำนวนหุ้นที่เต้นระบำตามตลาด" ไม่ใช่แค่ดัชนีเดียว</p>
+      <div class="legend-row"><div class="legend-symbol">High Score</div><div class="legend-desc">ตลาดอยู่ใน Stage 2 (ขาขึ้น) หุ้นส่วนใหญ่มีส่วนร่วม — เทรดได้เต็มที่</div></div>
+      <div class="legend-row"><div class="legend-symbol">Low Score</div><div class="legend-desc">ตลาดอยู่ใน Stage 4 (ขาลง) หรือเปราะบาง — ควรลดพอร์ตหรือถือเงินสด</div></div>
+      <div class="legend-row"><div class="legend-symbol">Components</div><div class="legend-desc">ดู % หุ้นเหนือเส้น SMA 200, 150, 50 วัน และ Advance-Decline Line</div></div>
+    </div>`
+  },
   exposure: {
     title: '🛡️ คู่มือ: Exposure Coach',
     html: `<div class="legend-section">
-      <h3>คำแนะนำระดับ Exposure</h3>
-      <div class="legend-row"><div class="legend-symbol" style="color:#00e676">BULLISH</div><div class="legend-desc">ลงทุนเต็มที่ตามแผน</div></div>
-      <div class="legend-row"><div class="legend-symbol" style="color:#00d4ff">NEW_ENTRY_ALLOWED</div><div class="legend-desc">เปิด position ใหม่ได้</div></div>
-      <div class="legend-row"><div class="legend-symbol" style="color:#ff9800">CAUTIOUS</div><div class="legend-desc">ลดขนาด position ลง</div></div>
-      <div class="legend-row"><div class="legend-symbol" style="color:#ff9800">REDUCE_ONLY</div><div class="legend-desc">ลด position เท่านั้น ห้ามซื้อเพิ่ม</div></div>
-      <div class="legend-row"><div class="legend-symbol" style="color:#f44336">CASH_PRIORITY</div><div class="legend-desc">ถือเงินสดเป็นหลัก</div></div>
+      <h3>Theory: Progressive Exposure (Minervini)</h3>
+      <p style="font-size:.8rem;color:var(--muted)">"ความเสี่ยงมาก่อนกำไรเสมอ" — ปรับขนาดพอร์ตตามความง่ายของตลาด</p>
+      <div class="legend-row"><div class="legend-symbol" style="color:var(--red)">CASH_PRIORITY</div><div class="legend-desc">ตลาดอันตราย ⛔ ถือเงินสดไว้ก่อน ไม่ควรซื้อ (composite &lt; 30)</div></div>
+      <div class="legend-row"><div class="legend-symbol" style="color:var(--red)">REDUCE_ONLY</div><div class="legend-desc">ตลาดเสี่ยงสูง ให้ขายหุ้นที่เริ่มเสียทรง ห้ามซื้อเพิ่ม (composite &lt; 50)</div></div>
+      <div class="legend-row"><div class="legend-symbol" style="color:var(--green)">NEW_ENTRY_ALLOWED</div><div class="legend-desc">ตลาดเป็นใจ ให้ขยายฐานการลงทุนได้ตาม Exposure Ceiling (composite ≥ 50)</div></div>
+    </div>`
+  },
+  ibd: {
+    title: '📉 คู่มือ: Market Pulse (IBD Method)',
+    html: `<div class="legend-section">
+      <h3>Theory: William O'Neil's Distribution Days</h3>
+      <p style="font-size:.8rem;color:var(--muted)">ตรวจจับ "รอยเท้าของรายใหญ่" ผ่านดัชนี (S&P500 / NASDAQ)</p>
+      <div class="legend-row"><div class="legend-symbol">Distribution Day</div><div class="legend-desc">วันที่ดัชนีปิดลบพร้อมวอลุ่มสูงกว่าวันก่อน — รายใหญ่เริ่มทิ้งของ</div></div>
+      <div class="legend-row"><div class="legend-symbol">DD Count</div><div class="legend-desc">สะสมเกิน 5-6 วันในช่วงสั้นๆ = สัญญาณจบคะแนนขาขึ้น (Market Top)</div></div>
     </div>`
   },
   vcp: {
-    title: '🔍 คู่มือ: VCP Screener',
+    title: '🔍 คู่มือ: VCP & SEPA Strategy',
     html: `<div class="legend-section">
-      <h3>State หุ้น</h3>
+      <h3>Theory: Mark Minervini's VCP Pattern</h3>
+      <p style="font-size:.8rem;color:var(--muted)">ค้นหา "หุ้นที่มีพลังแฝง" ผ่านการบีบตัวของราคา (Volatility Contraction)</p>
+      <div class="legend-row"><div class="legend-symbol">Trend Template</div><div class="legend-desc">หุ้นต้องเป็นขาขึ้น Stage 2 (SMA เรียงตัวสวย) ก่อนสแกน</div></div>
+      <div class="legend-row"><div class="legend-symbol">Contractions</div><div class="legend-desc">การบีบตัวของราคา (T1, T2, T3) ที่แคบลงเรื่อยๆ พร้อมวอลุ่มแห้งสนิท</div></div>
+      <div class="legend-row"><div class="legend-symbol">Pivot Point</div><div class="legend-desc">จุดตัดสินใจที่ราคาจะ "ระเบิด" (Breakout) ออกจากฐานราคาที่แคบที่สุด</div></div>
+      
+      <h3 style="margin-top:12px">State ของหุ้น (Execution State)</h3>
       <div class="legend-row"><div class="legend-symbol"><span class="state-pill bg-green">Pre-breakout</span></div><div class="legend-desc">กำลังสะสมพลัง ใกล้ Pivot — น่าสนใจที่สุด</div></div>
-      <div class="legend-row"><div class="legend-symbol"><span class="state-pill bg-green">Breakout</span></div><div class="legend-desc">ผ่าน Pivot แล้ว — ยังเป็นโอกาสถ้าไม่ Extended</div></div>
-      <div class="legend-row"><div class="legend-symbol"><span class="state-pill bg-orange">Extended</span></div><div class="legend-desc">ขึ้นมาแล้ว — รอ Pullback</div></div>
-      <div class="legend-row"><div class="legend-symbol"><span class="state-pill bg-red">Damaged</span></div><div class="legend-desc">Pattern เสียหาย — หลีกเลี่ยง</div></div>
+      <div class="legend-row"><div class="legend-symbol"><span class="state-pill bg-green">Breakout</span></div><div class="legend-desc">ผ่าน Pivot แล้ว — ยังเป็นโอกาสถ้าไม่เกิน 5% จากจุดซื้อ</div></div>
+      <div class="legend-row"><div class="legend-symbol"><span class="state-pill bg-orange">Extended</span></div><div class="legend-desc">ขึ้นมาแล้ว (5-10%) — เสี่ยงถ้าจะไล่ราคา รอ Pullback</div></div>
+      <div class="legend-row"><div class="legend-symbol"><span class="state-pill bg-red">Overextended</span></div><div class="legend-desc">ราคาห่างจากเส้นค่าเฉลี่ยมากเกินไป (>50% จาก SMA200) — ห้ามซื้อเด็ดขาด</div></div>
+      <div class="legend-row"><div class="legend-symbol"><span class="state-pill bg-red">Damaged</span></div><div class="legend-desc">Pattern เสียหาย หรือหลุดแนวรับสำคัญ — หลีกเลี่ยง</div></div>
     </div>`
   },
   breakout: {
     title: '🎯 คู่มือ: Breakout Trade Plan',
     html: `<div class="legend-section">
-      <h3>ราคาที่ระบบแนะนำ</h3>
-      <div class="legend-row"><div class="legend-symbol" style="color:var(--cyan)">Signal Entry</div><div class="legend-desc">ราคาเริ่มซื้อ ideal — pivot + 0.1% buffer</div></div>
-      <div class="legend-row"><div class="legend-symbol" style="color:var(--cyan)">Worst Entry</div><div class="legend-desc">ราคาสูงสุดที่ยอมซื้อได้ — pivot + 2% max chase</div></div>
-      <div class="legend-row"><div class="legend-symbol" style="color:var(--red)">Stop Loss</div><div class="legend-desc">ตัดขาดทุนทันทีถ้าราคาต่ำกว่านี้ — low ของ contraction สุดท้าย - 1%</div></div>
-      <div class="legend-row"><div class="legend-symbol" style="color:var(--green)">Target (R)</div><div class="legend-desc">เป้ากำไร = Entry + (Entry - Stop) × R-Multiple ที่ตั้งไว้</div></div>
-      <h3 style="margin-top:12px">Status</h3>
-      <div class="legend-row"><div class="legend-symbol"><span class="cls-actionable">ACTIONABLE</span></div><div class="legend-desc">ผ่านทุก gate — พร้อมเข้าซื้อเมื่อราคาถึง Signal Entry</div></div>
-      <div class="legend-row"><div class="legend-symbol"><span class="cls-watchlist">WATCHLIST</span></div><div class="legend-desc">Score ไม่ถึง threshold — จับตาดู ยังไม่ซื้อ</div></div>
-      <div class="legend-row"><div class="legend-symbol"><span class="cls-revalidation">REVALIDATE</span></div><div class="legend-desc">Breakout แล้ว — ต้องยืนยันอีกครั้งก่อนซื้อ</div></div>
-      <div class="legend-row"><div class="legend-symbol"><span class="cls-deferred">DEFERRED</span></div><div class="legend-desc">Portfolio heat เต็ม — เลื่อนไปก่อน</div></div>
+      <h3>Theory: Van Tharp's R-Multiple & Risk Management</h3>
+      <div class="legend-row"><div class="legend-symbol">Signal Entry</div><div class="legend-desc">จุดเข้าซื้อที่ดีที่สุด (Pivot + 0.1%)</div></div>
+      <div class="legend-row"><div class="legend-symbol">Stop Loss</div><div class="legend-desc">จุดที่ทฤษฎีผิดทาง (Natural Low) — ห้ามฝืนถือ</div></div>
+      <div class="legend-row"><div class="legend-symbol">Target (2R)</div><div class="legend-desc">เป้าหมายกำไรขั้นต่ำ (ต้องเป็น 2 เท่าของความเสี่ยงเพื่อให้กำไรสุทธิเป็นบวก)</div></div>
+      <div class="legend-row"><div class="legend-symbol">Position Size</div><div class="legend-desc">คำนวณจำนวนหุ้นให้เสียเงินไม่เกิน X% ของพอร์ตหากผิดทาง</div></div>
     </div>`
   },
   downtrend: {
-    title: '⏱️ คู่มือ: Downtrend Duration',
+    title: '⏱️ คู่มือ: Downtrend Duration Analysis',
     html: `<div class="legend-section">
-      <h3>บอกอะไร?</h3>
-      <div class="legend-desc" style="margin-bottom:12px">วิเคราะห์ข้อมูล historical ว่า หุ้น S&P500 โดยเฉลี่ยใช้เวลา correction กี่วัน — ช่วยกำหนด expectation ที่สมเหตุสมผล</div>
-      <h3>ใช้งาน</h3>
-      <div class="legend-row"><div class="legend-symbol">Median</div><div class="legend-desc">50% ของ correction จบภายใน X วัน — ใช้เป็น base case</div></div>
-      <div class="legend-row"><div class="legend-symbol">P75</div><div class="legend-desc">75% จบภายใน X วัน — conservative estimate</div></div>
-      <div class="legend-row"><div class="legend-symbol">P90</div><div class="legend-desc">90% จบภายใน X วัน — worst case ที่ยังสมเหตุ</div></div>
+      <h3>Theory: Historical Cycle Statistics</h3>
+      <div class="legend-desc" style="margin-bottom:12px">วิเคราะห์ข้อมูลในอดีตว่าช่วงตลาดขาลงมักจะกินเวลากี่วัน เพื่อให้เรา "ไม่รีบเข้าซื้อเร็วเกินไป" ในช่วงที่ตลาดยังปรับฐานไม่จบ</div>
+      <div class="legend-row"><div class="legend-symbol">Median Case</div><div class="legend-desc">ระยะเวลาปกติที่การพักตัวมักจะจบลง</div></div>
     </div>`
   },
   earnings: {
     title: '📈 คู่มือ: Earnings Trade Analyzer',
     html: `<div class="legend-section">
-      <h3>5-Factor Scoring System (0–100)</h3>
-      <div class="legend-row"><div class="legend-symbol">Gap Size</div><div class="legend-desc">25% — ขนาด Gap หลังประกาศผล</div></div>
-      <div class="legend-row"><div class="legend-symbol">Pre-Trend</div><div class="legend-desc">30% — Trend ก่อนประกาศ</div></div>
-      <div class="legend-row"><div class="legend-symbol">Volume</div><div class="legend-desc">20% — ปริมาณซื้อขาย</div></div>
-      <div class="legend-row"><div class="legend-symbol">MA200</div><div class="legend-desc">15% — อยู่เหนือ MA200</div></div>
-      <div class="legend-row"><div class="legend-symbol">MA50</div><div class="legend-desc">10% — อยู่เหนือ MA50</div></div>
-      <h3 style="margin-top:12px">Grade</h3>
-      <div class="legend-row"><div class="legend-symbol"><span class="grade-A">A</span></div><div class="legend-desc">≥75 — momentum แข็งมาก</div></div>
-      <div class="legend-row"><div class="legend-symbol"><span class="grade-B">B</span></div><div class="legend-desc">60–74 — setup ดี</div></div>
-      <div class="legend-row"><div class="legend-symbol"><span class="grade-C">C</span></div><div class="legend-desc">45–59 — ผ่านขั้นต่ำ</div></div>
-      <div class="legend-row"><div class="legend-symbol"><span class="grade-D">D</span></div><div class="legend-desc">&lt;45 — ไม่แนะนำ</div></div>
+      <h3>5-Factor Scoring System (Post-Earnings Drift)</h3>
+      <div class="legend-row"><div class="legend-symbol">Gap & Go</div><div class="legend-desc">ค้นหาหุ้นที่เบรกเอาท์ด้วยแรงกระโดดหลังงบออก (Positive Surprise)</div></div>
+      <div class="legend-row"><div class="legend-symbol">Grade A</div><div class="legend-desc">โมเมนตัมแข็งแกร่งที่สุด — มีโอกาสวิ่งต่อได้หลายสัปดาห์</div></div>
     </div>`
   },
   tools: {
-    title: '🛠️ เครื่องมือวิเคราะห์',
+    title: '🛠️ ทฤษฎีเบื้องหลัง Indicators',
     html: `<div class="legend-section">
-      <h3>Technical Indicators</h3>
-      <div class="legend-row"><div class="legend-symbol">SMA 200</div><div class="legend-desc">เส้นแนวโน้มระยะยาว — ราคาต้องอยู่เหนือ</div></div>
-      <div class="legend-row"><div class="legend-symbol">SMA 150</div><div class="legend-desc">ยืนยัน Stage 2 ขาขึ้น</div></div>
-      <div class="legend-row"><div class="legend-symbol">SMA 50</div><div class="legend-desc">แนวรับระยะกลาง</div></div>
-      <div class="legend-row"><div class="legend-symbol">RS Rank</div><div class="legend-desc">Relative Strength เทียบตลาด — เป้า ≥80</div></div>
+      <div class="legend-row"><div class="legend-symbol">SMA 200/150</div><div class="legend-desc">Long-term Trend — ถ้าราคาอยู่ใต้เส้นนี้ ห้ามซื้อเด็ดขาด (Stage 4)</div></div>
+      <div class="legend-row"><div class="legend-symbol">RS Rank</div><div class="legend-desc">Relative Strength (O'Neil) — หุ้นต้องแข็งแกร่งกว่าตลาด (เป้า >80)</div></div>
+      <div class="legend-row"><div class="legend-symbol">ATR</div><div class="legend-desc">Average True Range — วัดความผันผวนเพื่อตั้งจุด Stop Loss ที่เหมาะสม</div></div>
+      <div class="legend-row"><div class="legend-symbol">VCP</div><div class="legend-desc">Volatility Contraction — การสะสมพลังของราคาก่อนการวิ่งรอบใหญ่</div></div>
     </div>`
   }
 };
@@ -456,6 +495,7 @@ async function setMarket(m) {
   currentMarket = m;
   document.querySelectorAll('.mkt-btn').forEach(b => b.classList.remove('active'));
   document.getElementById(`mkt-${m}`).classList.add('active');
+  
   await refreshHistoryList();
   await loadData();
 }
@@ -508,7 +548,7 @@ async function loadData(at) {
     if (RAW_DATA.canslim) renderCANSLIM(RAW_DATA.canslim);
 
     const usOnly = currentMarket === 'US';
-    ['ibdSection','ibdCard','earnSection','earnCard','breakoutSection','breakoutCard',
+    ['ibdSection','ibdCard','earnSection','earnCard',
      'downtrendSection','downtrendCard','canslimSection','canslimCard'].forEach(id => {
       document.getElementById(id).style.display = usOnly ? '' : 'none';
     });
@@ -616,7 +656,7 @@ function renderExposure(e) {
   document.getElementById('expCeiling').textContent = (e.exposure_ceiling_pct || 0) + '%';
   document.getElementById('expBias').textContent = e.bias || '—';
   document.getElementById('expConf').textContent = e.confidence || '—';
-  const colors = { REDUCE_ONLY:'var(--red)', CAUTIOUS:'var(--orange)', BULLISH:'var(--green)', NEW_ENTRY_ALLOWED:'var(--green)', CASH_PRIORITY:'var(--red)' };
+  const colors = { CASH_PRIORITY:'var(--red)', REDUCE_ONLY:'var(--red)', NEW_ENTRY_ALLOWED:'var(--green)' };
   document.getElementById('expRec').style.color = colors[e.recommendation] || 'var(--text)';
   document.getElementById('expRationale').innerHTML = `<strong>ตรรกะ:</strong> ${e.rationale||'—'}`;
 }
@@ -660,7 +700,12 @@ function renderBreakoutPlan(plan) {
       <td><span class="cls-actionable">ACTIONABLE</span></td>
       <td class="entry-price">${priceSign}${(tp.signal_entry||0).toFixed(2)}<br><small style="color:var(--muted)">max: ${priceSign}${(tp.worst_entry||0).toFixed(2)}</small></td>
       <td class="stop-price">${priceSign}${(tp.stop_loss_price||0).toFixed(2)}<br><small style="color:var(--muted)">${(tp.risk_pct_worst||0).toFixed(1)}% risk</small></td>
-      <td class="target-price">${priceSign}${(tp.target_price||0).toFixed(2)}<br><small style="color:var(--muted)">${tp.reward_risk_ratio||'—'}R</small></td>
+      <td class="target-price">
+        ${priceSign}${(tp.target_price||0).toFixed(2)}<br>
+        <small style="color:var(--muted)">${tp.reward_risk_ratio||'—'}R (full)</small>
+        ${tp.target_1r_price ? `<br><small style="color:#ffb347">⚡ 1R: ${priceSign}${tp.target_1r_price.toFixed(2)}</small>` : ''}
+        ${tp.target_1r_price ? `<br><small style="color:var(--muted);font-size:.62rem">💡 ขาย 50% @ 1R · trail ส่วนที่เหลือ</small>` : ''}
+      </td>
       <td style="font-family:'JetBrains Mono',monospace">${tp.shares||'—'}<br><small style="color:var(--muted)">${priceSign}${(tp.risk_dollars||0).toFixed(0)} risk</small></td>
       <td style="font-size:.72rem;color:var(--muted)">${o.sector||'—'}</td>
     </tr>`;
@@ -861,11 +906,15 @@ function updateVCP() {
   const results = [...(RAW_DATA?.vcp?.results || [])];
   const search = document.getElementById('vcpSearch').value.toLowerCase();
   const stateFilter = document.getElementById('vcpStateFilter').value;
+  const minScore = parseFloat(document.getElementById('vcpMinScore').value) || 0;
   const limit = parseInt(document.getElementById('vcpLimit').value);
   let filtered = results.filter(s => {
-    const mSearch = s.symbol.toLowerCase().includes(search) || (s.company_name||'').toLowerCase().includes(search);
+    const mSearch = s.symbol.toLowerCase().includes(search)
+      || (s.company_name||'').toLowerCase().includes(search)
+      || (s.sector||'').toLowerCase().includes(search);
     const mState = !stateFilter || s.execution_state === stateFilter;
-    return mSearch && mState;
+    const mScore = s.composite_score >= minScore;
+    return mSearch && mState && mScore;
   });
   filtered.sort((a,b) => {
     let valA, valB;
@@ -878,6 +927,10 @@ function updateVCP() {
     else if (col === 'trend_score') { valA = a.trend_template?.score||0; valB = b.trend_template?.score||0; }
     else if (col === 'rs_rank_estimate') { valA = a.relative_strength?.rs_percentile||a.relative_strength?.rs_rank_estimate||0; valB = b.relative_strength?.rs_percentile||b.relative_strength?.rs_rank_estimate||0; }
     else if (col === 'atr_value') { valA = a.vcp_pattern?.atr_value||0; valB = b.vcp_pattern?.atr_value||0; }
+    else if (col === 'distance_pct') {
+      valA = Math.abs(a.pivot_proximity?.distance_from_pivot_pct ?? 999);
+      valB = Math.abs(b.pivot_proximity?.distance_from_pivot_pct ?? 999);
+    }
     else { valA = a[col]||0; valB = b[col]||0; }
     if (valA < valB) return -1 * VCP_SORT.dir;
     if (valA > valB) return 1 * VCP_SORT.dir;
@@ -889,7 +942,7 @@ function updateVCP() {
 function renderVCPTable(results) {
   const tbody = document.getElementById('vcpTbody');
   if (!results || results.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:40px">ไม่มีหุ้นผ่านเกณฑ์ VCP</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;color:var(--muted);padding:40px">ไม่มีหุ้นผ่านเกณฑ์ VCP</td></tr>';
     document.getElementById('funnel').innerHTML = '';
     return;
   }
@@ -921,12 +974,30 @@ function renderVCPTable(results) {
     const atrCol = atrPct > 5 ? 'var(--red)' : atrPct > 3 ? 'var(--orange)' : 'var(--green)';
     const atrDisplay = atr ? atr.toFixed(2) : '—';
     const atrPctDisplay = atrPct ? atrPct.toFixed(1) + '%' : '';
+    // Distance from pivot
+    const dist = s.pivot_proximity?.distance_from_pivot_pct;
+    const distCol = dist == null ? 'var(--muted)'
+      : Math.abs(dist) <= 1 ? 'var(--green)'
+      : Math.abs(dist) <= 3 ? 'var(--gold)'
+      : 'var(--orange)';
+    const distDisplay = dist != null ? (dist >= 0 ? '+' : '') + dist.toFixed(1) + '%' : '—';
+    // Contractions count
+    const conCount = s.vcp_pattern?.contractions?.length || 0;
+    const conCol = conCount >= 2 && conCount <= 4 ? 'var(--green)' : 'var(--gold)';
+    const settings = getSettings();
+    const targetR = parseFloat(settings.target_r) || 2.0;
+    const pivot = s.vcp_pattern?.pivot_price;
+    const sl = s.pivot_proximity?.stop_loss_price;
+    const targetPrice = (pivot && sl) ? pivot + (targetR * (pivot - sl)) : null;
+
     return `
       <tr onclick="toggleRow(${i})" style="cursor:pointer" data-symbol="${s.symbol}">
         <td><span class="sym">${s.symbol}</span><br><small style="color:var(--muted)">${s.company_name||''}</small></td>
         <td><span class="score-pill" style="background:${sc}22;color:${sc}">${s.composite_score.toFixed(1)}</span></td>
         <td class="price">${priceSign}${s.price?.toFixed(2)}</td>
-        <td class="price" style="color:var(--gold)">${priceSign}${s.vcp_pattern?.pivot_price?.toFixed(2)||'—'}</td>
+        <td class="price" style="color:var(--gold)">${priceSign}${pivot?.toFixed(2)||'—'}</td>
+        <td class="price" style="color:var(--red)">${sl ? priceSign + sl.toFixed(2) : '—'}</td>
+        <td class="price" style="color:#ff80ab">${targetPrice ? priceSign + targetPrice.toFixed(2) : '—'}</td>
         <td><span class="state-pill ${stCls}">${s.execution_state}</span></td>
         <td><span class="trend-badge ${trndCls}">${trendVal.toFixed(0)}</span></td>
         <td style="font-family:'JetBrains Mono',monospace;color:${rsCol};font-weight:700" title="${rsRating}">
@@ -935,10 +1006,16 @@ function renderVCPTable(results) {
         <td style="font-family:'JetBrains Mono',monospace;color:${atrCol}" title="ATR=${atrDisplay} (${atrPctDisplay} of price)">
           ${atrDisplay}<br><small style="font-size:.65rem;opacity:.7">${atrPctDisplay}</small>
         </td>
+        <td style="font-family:'JetBrains Mono',monospace;color:${distCol};font-weight:700;text-align:center" title="ห่างจาก Pivot ${distDisplay}">
+          ${distDisplay}
+        </td>
+        <td style="font-family:'JetBrains Mono',monospace;color:${conCol};font-weight:700;text-align:center" title="${conCount} contractions (Ideal: 2-4)">
+          ${conCount||'—'}
+        </td>
         <td style="font-size:.7rem;color:var(--muted)">${s.quality_rating}</td>
       </tr>
       <tr class="expand-row" id="row-${i}">
-        <td colspan="9" class="expand-cell">
+        <td colspan="13" class="expand-cell">
           <div id="chart-${s.symbol}" class="chart-loading">📊 กำลังโหลดกราฟ...</div>
           ${(() => {
             const tt = s.trend_template || {};
@@ -1006,17 +1083,60 @@ async function initChart(symbol) {
     container.innerHTML = '';
     container.classList.remove('chart-loading');
     container.classList.add('chart-container');
+
     const chart = LightweightCharts.createChart(container, {
       layout: { background: { color: '#0a0f1e' }, textColor: '#d1d4dc' },
       grid: { vertLines: { color: '#1e3a5f' }, horzLines: { color: '#1e3a5f' } },
       timeScale: { borderColor: '#1e3a5f' },
-      rightPriceScale: { borderColor: '#1e3a5f' }
+      rightPriceScale: { borderColor: '#1e3a5f', scaleMargins: { top: 0.08, bottom: 0.28 } },
     });
+
+    // Candlestick series
     const candleSeries = chart.addCandlestickSeries({
       upColor:'#00e676', borderUpColor:'#00e676', wickUpColor:'#00e676',
-      downColor:'#f44336', borderDownColor:'#f44336', wickDownColor:'#f44336'
+      downColor:'#f44336', borderDownColor:'#f44336', wickDownColor:'#f44336',
     });
     candleSeries.setData(data);
+
+    // Volume bars (separate price scale)
+    const volSeries = chart.addHistogramSeries({
+      color: '#26a69a', priceFormat: { type: 'volume' }, priceScaleId: 'volume',
+    });
+    chart.priceScale('volume').applyOptions({ scaleMargins: { top: 0.78, bottom: 0 } });
+    volSeries.setData(data.map(d => ({
+      time: d.time, value: d.value,
+      color: d.close >= d.open ? '#00e67650' : '#f4433650',
+    })));
+
+    // SMA lines — calculated from price history
+    const closes = data.map(d => d.close);
+    const calcSMA = (arr, n) => arr.map((_, i) =>
+      i < n - 1 ? null : arr.slice(i - n + 1, i + 1).reduce((s, v) => s + v, 0) / n
+    );
+    const addSMALine = (vals, color, title) => {
+      const s = chart.addLineSeries({ color, lineWidth: 1, title,
+        lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false });
+      s.setData(data.map((d, i) => vals[i] != null ? { time: d.time, value: vals[i] } : null).filter(Boolean));
+    };
+    addSMALine(calcSMA(closes, 50),  '#ff9800', 'SMA50');
+    addSMALine(calcSMA(closes, 150), '#a855f7', 'SMA150');
+    addSMALine(calcSMA(closes, 200), '#00d4ff', 'SMA200');
+
+    // Pivot price line (gold dashed) from VCP data
+    const vcpR = (RAW_DATA?.vcp?.results || []).find(r => r.symbol === symbol);
+    const pivotPrice = vcpR?.vcp_pattern?.pivot_price;
+    if (pivotPrice && data.length > 0) {
+      const pivotSeries = chart.addLineSeries({
+        color: '#ffd700', lineWidth: 2, lineStyle: 1,
+        title: 'Pivot', lastValueVisible: true, priceLineVisible: false,
+      });
+      const startIdx = Math.max(0, data.length - 120);
+      pivotSeries.setData([
+        { time: data[startIdx].time, value: pivotPrice },
+        { time: data[data.length - 1].time, value: pivotPrice },
+      ]);
+    }
+
     chart.timeScale().fitContent();
   } catch(e) {
     container.innerHTML = '❌ โหลดกราฟไม่สำเร็จ — ' + e.message;
@@ -1034,7 +1154,11 @@ async function runAnalysis() {
   const btn = document.getElementById('runBtn');
   const oldText = btn.innerText;
   btn.disabled = true;
-  btn.innerText = '⏳ กำลังวิเคราะห์...';
+  const startTime = Date.now();
+  const timer = setInterval(() => {
+    const elapsed = Math.floor((Date.now() - startTime) / 1000);
+    btn.innerText = `⏳ กำลังวิเคราะห์... ${elapsed}s`;
+  }, 1000);
   const s = getSettings();
   const params = new URLSearchParams({ market: currentMarket, ...s });
   showToast(`กำลังวิเคราะห์ตลาด ${currentMarket}... อาจใช้เวลา 3-8 นาที`);
@@ -1042,17 +1166,22 @@ async function runAnalysis() {
     const res = await fetch(`/api/run?${params}`);
     const data = await res.json();
     const log = data.log || [];
-    const failed = log.filter(l => !l.ok);
     const ok = log.filter(l => l.ok);
-    if (failed.length > 0) {
-      const names = failed.map(l => l.cmd).join(', ');
-      showToast(`⚠️ สำเร็จ ${ok.length}/${log.length} — ล้มเหลว: ${names}`);
-      console.warn('Failed scripts:', failed);
-    } else {
-      showToast(`✅ วิเคราะห์ ${currentMarket} สำเร็จทั้ง ${ok.length} สคริปต์`);
-    }
+    const elapsed = Math.floor((Date.now() - startTime) / 1000);
+    // Show per-script results in modal
+    const logHtml = log.map(l => `
+      <div style="display:flex;gap:10px;align-items:flex-start;padding:8px 10px;background:${l.ok?'rgba(0,230,118,.05)':'rgba(244,67,54,.06)'};border-radius:6px;margin-bottom:6px;border-left:3px solid ${l.ok?'var(--green)':'var(--red)'}">
+        <span style="font-size:1rem;flex-shrink:0">${l.ok ? '✅' : '❌'}</span>
+        <div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:.82rem;color:${l.ok?'var(--green)':'var(--red)'}">${l.cmd}</div>
+          ${!l.ok && l.err ? `<div style="font-size:.7rem;color:var(--muted);margin-top:3px;white-space:pre-wrap">${l.err.slice(0,200)}</div>` : ''}
+        </div>
+      </div>`).join('');
+    document.getElementById('modalTitle').textContent =
+      `🚀 ผลการวิเคราะห์ — ${ok.length}/${log.length} สำเร็จ (${elapsed}s)`;
+    document.getElementById('modalBody').innerHTML = logHtml;
+    document.getElementById('modalOverlay').classList.add('open');
     await refreshHistoryList();
-    // reset to live view after fresh run
     document.getElementById('historySelect').value = '';
     document.getElementById('historyBadge').style.display = 'none';
     await loadData();
@@ -1060,6 +1189,7 @@ async function runAnalysis() {
     showToast('❌ เกิดข้อผิดพลาด: ' + e.message);
     console.error(e);
   } finally {
+    clearInterval(timer);
     btn.disabled = false;
     btn.innerText = oldText;
   }

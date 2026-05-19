@@ -137,10 +137,15 @@ def process_candidate(
 
     rating_band = get_rating_band(composite_score)
 
-    # Derive trade prices
-    pivot = result["vcp_pattern"]["pivot_price"]
-    contractions = result["vcp_pattern"]["contractions"]
-    last_low = contractions[-1]["low_price"]
+    # Derive trade prices — defensive access in case validation edge-cases slip through
+    vcp = result.get("vcp_pattern") or {}
+    pivot = vcp.get("pivot_price")
+    contractions = vcp.get("contractions") or []
+    if not pivot or not contractions:
+        return _reject(symbol, f"vcp_pattern missing pivot_price or contractions (symbol={symbol})")
+    last_low = contractions[-1].get("low_price")
+    if last_low is None:
+        return _reject(symbol, "contractions[-1].low_price is None")
 
     try:
         signal_entry, worst_entry, stop_loss = derive_trade_prices(
@@ -155,8 +160,11 @@ def process_candidate(
 
     risk_pct_signal, risk_pct_worst = calculate_risks(signal_entry, worst_entry, stop_loss)
 
-    # Take profit (worst-entry based)
+    # Bracket backstop — used in Alpaca order template (conservative; always > worst_entry)
     tp_worst = round_price(worst_entry + args.target_r_multiple * (worst_entry - stop_loss))
+    # Realistic targets anchored on signal_entry (displayed in dashboard / markdown)
+    tp_signal_1r = round_price(signal_entry + 1.0 * (signal_entry - stop_loss))
+    tp_signal_full = round_price(signal_entry + args.target_r_multiple * (signal_entry - stop_loss))
 
     base_output = {
         "symbol": symbol,
@@ -197,6 +205,8 @@ def process_candidate(
             risk_pct_signal,
             risk_pct_worst,
             tp_worst,
+            tp_signal_1r,
+            tp_signal_full,
             pivot,
             cumulative_risk_pct,
             sector_tracker,
@@ -261,6 +271,8 @@ def _build_actionable(
     risk_pct_signal,
     risk_pct_worst,
     tp_worst,
+    tp_signal_1r,
+    tp_signal_full,
     pivot,
     cumulative_risk_pct,
     sector_tracker,
@@ -353,8 +365,16 @@ def _build_actionable(
             "risk_pct_worst": risk_pct_worst,
             "r_multiples_signal": calculate_r_multiples(signal_entry, stop_loss),
             "r_multiples_worst": calculate_r_multiples(worst_entry, stop_loss),
-            "target_price": tp_worst,
+            # Realistic targets anchored on signal_entry (dashboard display)
+            "target_1r_price": tp_signal_1r,
+            "target_price": tp_signal_full,
             "reward_risk_ratio": args.target_r_multiple,
+            "partial_exit_note": (
+                f"Partial exit: sell 50% at 1R ${tp_signal_1r:.2f}, "
+                f"trail rest to {args.target_r_multiple}R ${tp_signal_full:.2f}"
+            ),
+            # Bracket backstop sent to Alpaca (always > worst_entry)
+            "bracket_take_profit": tp_worst,
             "sizing_multiplier": multiplier,
             "effective_risk_pct": sizing["effective_risk_pct"],
             "shares": sizing["shares"],
@@ -521,6 +541,7 @@ def generate_markdown(plans: dict) -> str:
                     f"| Worst Entry | ${tp['worst_entry']:.2f} |",
                     f"| Stop Loss | ${tp['stop_loss_price']:.2f} |",
                     f"| Risk (worst) | {tp['risk_pct_worst']:.1f}% |",
+                    f"| 1R Partial Exit (50%) | ${tp['target_1r_price']:.2f} |",
                     f"| Target ({tp['reward_risk_ratio']}R) | ${tp['target_price']:.2f} |",
                     f"| Shares | {tp['shares']} |",
                     f"| Position Value | ${tp['position_value']:,.2f} |",
