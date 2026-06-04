@@ -409,7 +409,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERROR: no workflow manifests found under {workflows_dir}", file=sys.stderr)
         return 1
 
-    langs = ["en", "ja"] if args.lang == "all" else [args.lang]
+    langs = ["en"] if args.lang == "all" else [args.lang]
     drift = False
 
     for lang in langs:

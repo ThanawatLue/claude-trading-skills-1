@@ -317,7 +317,6 @@ def rewrite_file(path: Path, skills: list[dict]) -> tuple[str, str]:
 
 TARGETS = [
     ("README.md", {"catalog-en"}),
-    ("README.ja.md", {"catalog-ja"}),
     ("CLAUDE.md", {"api-matrix"}),
 ]
 
