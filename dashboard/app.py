@@ -1,19 +1,41 @@
 """Trading Intelligence Dashboard - Flask Backend"""
+
+import concurrent.futures
 import glob
 import json
 import os
 import sqlite3
 import subprocess
 import sys
-import concurrent.futures
-import threading
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
+import hf_sync
 import yfinance as yf
 from flask import Flask, jsonify, render_template, request
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(BASE_DIR, "skills", "paper-trade-simulator", "scripts"))
+from paper_trade import (
+    VALID_EMOTIONS,
+)
+from paper_trade import (
+    add_journal as paper_journal,
+)
+from paper_trade import (
+    close_position as paper_close,
+)
+from paper_trade import (
+    compute_stats as paper_stats,
+)
+from paper_trade import (
+    list_positions as paper_list,
+)
+from paper_trade import (  # noqa: E402
+    open_position as paper_open,
+)
+from update_marks import update_all as paper_update_marks  # noqa: E402
+
 REPORTS_DIR = os.path.join(BASE_DIR, "reports")
 ROOT_DIR = BASE_DIR  # market breadth files land here
 DB_PATH = os.path.join(BASE_DIR, "state", "market_cache.db")
@@ -22,6 +44,9 @@ DB_PATH = os.path.join(BASE_DIR, "state", "market_cache.db")
 _SUBPROCESS_ENV = {**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"}
 
 app = Flask(__name__)
+
+# Try downloading database from HF on startup
+hf_sync.download_db()
 
 # ── Report Database ────────────────────────────────────────────────────────────
 
@@ -46,19 +71,37 @@ def _db() -> sqlite3.Connection:
     return conn
 
 
+def _clean_nan(obj):
+    """Recursively replace NaN/Inf with None — JS JSON.parse rejects them."""
+    import math
+
+    if isinstance(obj, dict):
+        return {k: _clean_nan(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_clean_nan(v) for v in obj]
+    if isinstance(obj, float) and (math.isnan(obj) or math.isinf(obj)):
+        return None
+    return obj
+
+
 def db_save_run(market: str, data: dict) -> str:
     """Save a full analysis snapshot to DB. Returns the run_at timestamp."""
     run_at = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     with _db() as conn:
         conn.execute(
             "INSERT INTO analysis_run (market, run_at, data) VALUES (?,?,?)",
-            (market, run_at, json.dumps(data, ensure_ascii=False)),
+            (market, run_at, json.dumps(_clean_nan(data), ensure_ascii=False)),
         )
+    hf_sync.upload_db()
     return run_at
 
 
 def db_load_run(market: str, at: str | None = None) -> dict | None:
-    """Load a snapshot: latest if at=None, specific timestamp otherwise."""
+    """Load a snapshot: latest if at=None, specific timestamp otherwise.
+
+    Defensively cleans NaN/Infinity from legacy rows so the JSON response is
+    valid for browser consumers (JS JSON.parse rejects NaN).
+    """
     with _db() as conn:
         if at:
             row = conn.execute(
@@ -70,7 +113,9 @@ def db_load_run(market: str, at: str | None = None) -> dict | None:
                 "SELECT data FROM analysis_run WHERE market=? ORDER BY run_at DESC LIMIT 1",
                 (market,),
             ).fetchone()
-    return json.loads(row["data"]) if row else None
+    if not row:
+        return None
+    return _clean_nan(json.loads(row["data"]))
 
 
 def db_list_runs(market: str, limit: int = 50) -> list[str]:
@@ -84,6 +129,7 @@ def db_list_runs(market: str, limit: int = 50) -> list[str]:
 
 
 # ── File helpers (fallback when DB has no data yet) ───────────────────────────
+
 
 def latest_file(pattern: str, market: str = "US") -> str | None:
     files = sorted(glob.glob(pattern), reverse=True)
@@ -103,37 +149,60 @@ def latest_file(pattern: str, market: str = "US") -> str | None:
 
 
 def latest_file_any(pattern: str) -> str | None:
+    """Pick newest matching file that parses as valid JSON; skip corrupted ones."""
     files = sorted(glob.glob(pattern), reverse=True)
-    return files[0] if files else None
+    for f in files:
+        try:
+            with open(f, encoding="utf-8") as j:
+                json.load(j)
+            return f
+        except Exception as e:
+            print(f"Skipping corrupted file {f}: {e}", file=sys.stderr)
+            continue
+    return None
 
 
 def load_json(path: str) -> dict | list | None:
+    """Load JSON file defensively — returns None on any error (missing or corrupted)."""
     if not path or not os.path.exists(path):
         return None
-    with open(path, encoding="utf-8") as f:
-        return json.load(f)
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"load_json error on {path}: {e}", file=sys.stderr)
+        return None
 
 
 def _collect_snapshot(market: str) -> dict:
     """Read all latest JSON files and build a snapshot dict."""
-    breadth = load_json(latest_file(
-        os.path.join(ROOT_DIR, "market_breadth_20[0-9][0-9]-*.json"), market))
-    vcp = load_json(latest_file(
-        os.path.join(REPORTS_DIR, "vcp_screener_*.json"), market))
-    exposure = load_json(latest_file(
-        os.path.join(REPORTS_DIR, "exposure_posture_*.json"), market))
-    ibd = load_json(latest_file_any(
-        os.path.join(REPORTS_DIR, "ibd_distribution_day_monitor_*.json")))
-    earnings_trade = load_json(latest_file_any(
-        os.path.join(REPORTS_DIR, "earnings_trade_*.json")))
-    breakout_plan = load_json(latest_file_any(
-        os.path.join(REPORTS_DIR, "breakout_trade_plan_*.json")))
-    uptrend = load_json(latest_file_any(
-        os.path.join(REPORTS_DIR, "uptrend_analysis_*.json")))
-    downtrend = load_json(latest_file_any(
-        os.path.join(REPORTS_DIR, "downtrend_analysis_*.json")))
-    canslim = load_json(latest_file_any(
-        os.path.join(REPORTS_DIR, "canslim_screener_*.json")))
+    breadth = load_json(
+        latest_file(os.path.join(ROOT_DIR, "market_breadth_20[0-9][0-9]-*.json"), market)
+    )
+    vcp = load_json(latest_file(os.path.join(REPORTS_DIR, "vcp_screener_*.json"), market))
+    exposure = load_json(latest_file(os.path.join(REPORTS_DIR, "exposure_posture_*.json"), market))
+    ibd = load_json(
+        latest_file_any(os.path.join(REPORTS_DIR, "ibd_distribution_day_monitor_*.json"))
+    )
+    earnings_trade = load_json(latest_file_any(os.path.join(REPORTS_DIR, "earnings_trade_*.json")))
+    breakout_plan = load_json(
+        latest_file_any(os.path.join(REPORTS_DIR, "breakout_trade_plan_*.json"))
+    )
+    uptrend = load_json(latest_file_any(os.path.join(REPORTS_DIR, "uptrend_analysis_*.json")))
+    downtrend = load_json(latest_file_any(os.path.join(REPORTS_DIR, "downtrend_analysis_*.json")))
+    canslim = load_json(latest_file_any(os.path.join(REPORTS_DIR, "canslim_screener_*.json")))
+    thai_swing = load_json(latest_file_any(os.path.join(REPORTS_DIR, "thai_swing_*.json")))
+    # NEW: TV-powered Thai skills
+    thai_sector_heatmap = load_json(
+        latest_file_any(os.path.join(REPORTS_DIR, "thai_sector_heatmap_*.json"))
+    )
+    thai_breadth = load_json(
+        latest_file_any(os.path.join(REPORTS_DIR, "thai_market_breadth_*.json"))
+    )
+    thai_watchlists = load_json(
+        latest_file_any(os.path.join(REPORTS_DIR, "thai_watchlists_*.json"))
+    )
+    thai_dividends = load_json(latest_file_any(os.path.join(REPORTS_DIR, "thai_dividends_*.json")))
     return {
         "market": market,
         "breadth": breadth,
@@ -145,6 +214,11 @@ def _collect_snapshot(market: str) -> dict:
         "uptrend": uptrend,
         "downtrend": downtrend,
         "canslim": canslim,
+        "thai_swing": thai_swing,
+        "thai_sector_heatmap": thai_sector_heatmap,
+        "thai_breadth": thai_breadth,
+        "thai_watchlists": thai_watchlists,
+        "thai_dividends": thai_dividends,
     }
 
 
@@ -171,6 +245,16 @@ def cleanup_old_files(keep_count: int = 2):
         os.path.join(REPORTS_DIR, "downtrend_analysis_*.md"),
         os.path.join(REPORTS_DIR, "canslim_screener_*.json"),
         os.path.join(REPORTS_DIR, "canslim_screener_*.md"),
+        os.path.join(REPORTS_DIR, "thai_swing_*.json"),
+        os.path.join(REPORTS_DIR, "thai_swing_*.md"),
+        os.path.join(REPORTS_DIR, "thai_sector_heatmap_*.json"),
+        os.path.join(REPORTS_DIR, "thai_sector_heatmap_*.md"),
+        os.path.join(REPORTS_DIR, "thai_market_breadth_*.json"),
+        os.path.join(REPORTS_DIR, "thai_market_breadth_*.md"),
+        os.path.join(REPORTS_DIR, "thai_watchlists_*.json"),
+        os.path.join(REPORTS_DIR, "thai_watchlists_*.md"),
+        os.path.join(REPORTS_DIR, "thai_dividends_*.json"),
+        os.path.join(REPORTS_DIR, "thai_dividends_*.md"),
         os.path.join(REPORTS_DIR, "skill_review_*.json"),
         os.path.join(REPORTS_DIR, "skill_review_*.md"),
     ]
@@ -190,14 +274,14 @@ def clean_unsuccessful_db_runs():
         db_path = DB_PATH
         if not os.path.exists(db_path):
             return
-        
+
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
-        
+
         rows = cursor.execute("SELECT id, market, run_at, data FROM analysis_run").fetchall()
         to_delete = []
-        
+
         for row in rows:
             run_id = row["id"]
             try:
@@ -205,29 +289,34 @@ def clean_unsuccessful_db_runs():
             except Exception:
                 to_delete.append(run_id)
                 continue
-                
+
             breadth = data.get("breadth")
             vcp = data.get("vcp")
             exposure = data.get("exposure")
-            
+
             is_unsuccessful = False
             if not breadth or not isinstance(breadth, dict) or not breadth.get("composite"):
                 is_unsuccessful = True
             elif not vcp or not isinstance(vcp, dict):
                 is_unsuccessful = True
-            elif not exposure or not isinstance(exposure, dict) or not exposure.get("recommendation"):
+            elif (
+                not exposure or not isinstance(exposure, dict) or not exposure.get("recommendation")
+            ):
                 is_unsuccessful = True
-                
+
             if is_unsuccessful:
                 to_delete.append(run_id)
-                
+
         if to_delete:
             cursor.execute(
                 f"DELETE FROM analysis_run WHERE id IN ({','.join(map(str, to_delete))})"
             )
             conn.commit()
-            print(f"Cleaned up {len(to_delete)} unsuccessful/incomplete runs from database.", file=sys.stderr)
-            
+            print(
+                f"Cleaned up {len(to_delete)} unsuccessful/incomplete runs from database.",
+                file=sys.stderr,
+            )
+
         conn.close()
     except Exception as e:
         print(f"Error during DB cleaning: {e}", file=sys.stderr)
@@ -250,13 +339,24 @@ def api_data():
             return jsonify({"error": f"No data for {market} at {at}"}), 404
         return jsonify(snapshot)
 
-    # Live view: try DB first, fallback to JSON files for first-run
+    # Live view: try DB first, fallback to JSON files for first-run.
+    # Forward-compat: deep-merge fresh JSON output on top of DB snapshot so
+    # newly-added fields (e.g. 'criteria' added to thai_watchlists) appear
+    # without requiring a full re-run.
     snapshot = db_load_run(market)
     if snapshot:
+        fresh = _collect_snapshot(market)
+        for k, v in fresh.items():
+            if k not in snapshot or snapshot.get(k) is None:
+                snapshot[k] = v
+            elif isinstance(snapshot.get(k), dict) and isinstance(v, dict):
+                # Augment dict: add keys present in fresh but missing in snapshot
+                for sub_k, sub_v in v.items():
+                    if sub_k not in snapshot[k] or snapshot[k].get(sub_k) is None:
+                        snapshot[k][sub_k] = sub_v
         return jsonify(snapshot)
 
-    snapshot = _collect_snapshot(market)
-    return jsonify(snapshot)
+    return jsonify(_collect_snapshot(market))
 
 
 @app.route("/api/runs")
@@ -281,43 +381,192 @@ def api_run():
     def _run(cmd, timeout=300, extra_env=None):
         env = {**_SUBPROCESS_ENV, **(extra_env or {})}
         try:
-            r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
-                               errors="replace", cwd=BASE_DIR, timeout=timeout, env=env)
-            return {"cmd": os.path.basename(cmd[1]), "ok": r.returncode == 0,
-                    "out": r.stdout[-1000:], "err": r.stderr[-1500:]}
+            r = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                cwd=BASE_DIR,
+                timeout=timeout,
+                env=env,
+            )
+            return {
+                "cmd": os.path.basename(cmd[1]),
+                "ok": r.returncode == 0,
+                "out": r.stdout[-1000:],
+                "err": r.stderr[-1500:],
+            }
         except subprocess.TimeoutExpired:
-            return {"cmd": os.path.basename(cmd[1]), "ok": False,
-                    "out": "", "err": f"Timeout after {timeout}s"}
+            return {
+                "cmd": os.path.basename(cmd[1]),
+                "ok": False,
+                "out": "",
+                "err": f"Timeout after {timeout}s",
+            }
         except Exception as e:
             return {"cmd": os.path.basename(cmd[1]), "ok": False, "out": "", "err": str(e)}
 
     # ── Phase 1: Heavy Primary Scanners (Parallel Execution) ──────────────────────
     primary_tasks = [
         # 1. Market Breadth Analyzer
-        ([sys.executable, os.path.join(BASE_DIR, "skills", "market-breadth-analyzer", "scripts", "market_breadth_analyzer.py"), "--market", market], 300, None),
+        (
+            [
+                sys.executable,
+                os.path.join(
+                    BASE_DIR,
+                    "skills",
+                    "market-breadth-analyzer",
+                    "scripts",
+                    "market_breadth_analyzer.py",
+                ),
+                "--market",
+                market,
+            ],
+            300,
+            None,
+        ),
         # 2. VCP Screener
-        ([sys.executable, os.path.join(BASE_DIR, "skills", "vcp-screener", "scripts", "screen_vcp.py"), "--market", market, "--max-candidates", "50", "--top", "50"], 300, None),
+        (
+            [
+                sys.executable,
+                os.path.join(BASE_DIR, "skills", "vcp-screener", "scripts", "screen_vcp.py"),
+                "--market",
+                market,
+                "--max-candidates",
+                "50",
+                "--top",
+                "50",
+            ],
+            300,
+            None,
+        ),
         # 3. Uptrend Analyzer
-        ([sys.executable, os.path.join(BASE_DIR, "skills", "uptrend-analyzer", "scripts", "uptrend_analyzer.py"), "--output-dir", REPORTS_DIR], 120, None),
+        (
+            [
+                sys.executable,
+                os.path.join(
+                    BASE_DIR, "skills", "uptrend-analyzer", "scripts", "uptrend_analyzer.py"
+                ),
+                "--output-dir",
+                REPORTS_DIR,
+            ],
+            120,
+            None,
+        ),
         # 4. Downtrend Duration Analyzer
-        ([sys.executable, os.path.join(BASE_DIR, "skills", "downtrend-duration-analyzer", "scripts", "analyze_downtrends.py"), "--max-stocks", "100", "--output-dir", REPORTS_DIR], 300, None)
+        (
+            [
+                sys.executable,
+                os.path.join(
+                    BASE_DIR,
+                    "skills",
+                    "downtrend-duration-analyzer",
+                    "scripts",
+                    "analyze_downtrends.py",
+                ),
+                "--max-stocks",
+                "100",
+                "--output-dir",
+                REPORTS_DIR,
+            ],
+            300,
+            None,
+        ),
     ]
 
-    if market == "US":
-        primary_tasks.extend([
-            # 5. IBD Distribution Day Monitor
-            ([sys.executable, os.path.join(BASE_DIR, "skills", "ibd-distribution-day-monitor", "scripts", "ibd_monitor.py"), "--output-dir", REPORTS_DIR], 60, None),
-            # 6. Earnings Trade Analyzer
-            ([sys.executable, os.path.join(BASE_DIR, "skills", "earnings-trade-analyzer", "scripts", "analyze_earnings_trades.py"), "--output-dir", REPORTS_DIR], 600, None),
-            # 7. CANSLIM Screener
-            ([sys.executable, os.path.join(BASE_DIR, "skills", "canslim-screener", "scripts", "screen_canslim.py"), "--max-candidates", "40", "--top", "40", "--output-dir", REPORTS_DIR], 300, None)
-        ])
+    # 5. CANSLIM Screener (supports both US and TH markets)
+    primary_tasks.append(
+        (
+            [
+                sys.executable,
+                os.path.join(
+                    BASE_DIR, "skills", "canslim-screener", "scripts", "screen_canslim.py"
+                ),
+                "--market",
+                market,
+                "--max-candidates",
+                "40",
+                "--top",
+                "40",
+                "--output-dir",
+                REPORTS_DIR,
+            ],
+            300,
+            None,
+        )
+    )
 
-    print(f"Starting Phase 1 parallel execution with {len(primary_tasks)} independent scanners...", file=sys.stderr)
+    if market == "US":
+        primary_tasks.extend(
+            [
+                # 6. IBD Distribution Day Monitor (US only)
+                (
+                    [
+                        sys.executable,
+                        os.path.join(
+                            BASE_DIR,
+                            "skills",
+                            "ibd-distribution-day-monitor",
+                            "scripts",
+                            "ibd_monitor.py",
+                        ),
+                        "--output-dir",
+                        REPORTS_DIR,
+                    ],
+                    60,
+                    None,
+                ),
+                # 7. Earnings Trade Analyzer (US only)
+                (
+                    [
+                        sys.executable,
+                        os.path.join(
+                            BASE_DIR,
+                            "skills",
+                            "earnings-trade-analyzer",
+                            "scripts",
+                            "analyze_earnings_trades.py",
+                        ),
+                        "--output-dir",
+                        REPORTS_DIR,
+                    ],
+                    600,
+                    None,
+                ),
+            ]
+        )
+
+    if market == "TH":
+        # 6. Thai Swing Screener (TH only) — in vcp-screener skill
+        thai_swing_script = os.path.join(
+            BASE_DIR, "skills", "vcp-screener", "scripts", "screen_thai_swing.py"
+        )
+        if os.path.exists(thai_swing_script):
+            primary_tasks.append(
+                ([sys.executable, thai_swing_script, "--output-dir", REPORTS_DIR], 180, None)
+            )
+        # 7-10. TV-powered Thai skills (parallel, no API key required)
+        tv_th_skills = [
+            ("thai-sector-heatmap", "generate_heatmap.py"),
+            ("thai-breadth-analyzer", "analyze_thai_breadth.py"),
+            ("thai-watchlist-builder", "build_watchlists.py"),
+            ("thai-dividend-screener", "screen_thai_dividends.py"),
+        ]
+        for skill_name, script_name in tv_th_skills:
+            script_path = os.path.join(BASE_DIR, "skills", skill_name, "scripts", script_name)
+            if os.path.exists(script_path):
+                primary_tasks.append(
+                    ([sys.executable, script_path, "--output-dir", REPORTS_DIR], 120, None)
+                )
+
+    print(
+        f"Starting Phase 1 parallel execution with {len(primary_tasks)} independent scanners...",
+        file=sys.stderr,
+    )
     with concurrent.futures.ThreadPoolExecutor(max_workers=len(primary_tasks)) as executor:
         futures = {
-            executor.submit(_run, cmd, timeout, env): cmd
-            for cmd, timeout, env in primary_tasks
+            executor.submit(_run, cmd, timeout, env): cmd for cmd, timeout, env in primary_tasks
         }
         for future in concurrent.futures.as_completed(futures):
             log.append(future.result())
@@ -326,50 +575,114 @@ def api_run():
     latest_mb = latest_file(os.path.join(ROOT_DIR, "market_breadth_20[0-9][0-9]-*.json"), market)
     latest_vcp = latest_file(os.path.join(REPORTS_DIR, "vcp_screener_*.json"), market)
 
-    dependent_tasks = [
-        # 1. Exposure Coach (needs fresh market breadth output)
-        ([sys.executable, os.path.join(BASE_DIR, "skills", "exposure-coach", "scripts", "calculate_exposure.py"), "--breadth", latest_mb or ""], 60, None)
-    ]
+    dependent_tasks = []
 
-    if latest_vcp:
+    if latest_mb:
+        # 1. Exposure Coach (needs fresh market breadth output)
         dependent_tasks.append(
-            # 2. Breakout Trade Planner (needs fresh VCP screener output)
-            ([sys.executable, os.path.join(BASE_DIR, "skills", "breakout-trade-planner", "scripts", "plan_breakout_trades.py"),
-              "--input", latest_vcp, "--account-size", account_size, "--risk-pct", risk_pct, "--target-r-multiple", target_r, "--output-dir", REPORTS_DIR], 60, None)
+            (
+                [
+                    sys.executable,
+                    os.path.join(
+                        BASE_DIR, "skills", "exposure-coach", "scripts", "calculate_exposure.py"
+                    ),
+                    "--breadth",
+                    latest_mb,
+                ],
+                60,
+                None,
+            )
+        )
+    else:
+        log.append(
+            {
+                "cmd": "calculate_exposure.py",
+                "ok": False,
+                "out": "",
+                "err": "No market breadth output found — run market breadth analyzer first",
+            }
         )
 
-    print(f"Starting Phase 2 parallel execution with {len(dependent_tasks)} dependent planners...", file=sys.stderr)
-    with concurrent.futures.ThreadPoolExecutor(max_workers=len(dependent_tasks)) as executor:
-        futures = {
-            executor.submit(_run, cmd, timeout, env): cmd
-            for cmd, timeout, env in dependent_tasks
-        }
-        for future in concurrent.futures.as_completed(futures):
-            log.append(future.result())
+    if latest_vcp:
+        # 2. Breakout Trade Planner (needs fresh VCP screener output)
+        dependent_tasks.append(
+            (
+                [
+                    sys.executable,
+                    os.path.join(
+                        BASE_DIR,
+                        "skills",
+                        "breakout-trade-planner",
+                        "scripts",
+                        "plan_breakout_trades.py",
+                    ),
+                    "--input",
+                    latest_vcp,
+                    "--account-size",
+                    account_size,
+                    "--risk-pct",
+                    risk_pct,
+                    "--target-r-multiple",
+                    target_r,
+                    "--output-dir",
+                    REPORTS_DIR,
+                ],
+                60,
+                None,
+            )
+        )
+    else:
+        log.append(
+            {
+                "cmd": "plan_breakout_trades.py",
+                "ok": False,
+                "out": "",
+                "err": "No VCP screener output found",
+            }
+        )
 
-    if not latest_vcp:
-        log.append({"cmd": "plan_breakout_trades.py", "ok": False,
-                    "out": "", "err": "No VCP screener output found"})
+    if dependent_tasks:
+        print(
+            f"Starting Phase 2 parallel execution with {len(dependent_tasks)} dependent planners...",
+            file=sys.stderr,
+        )
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(dependent_tasks)) as executor:
+            futures = {
+                executor.submit(_run, cmd, timeout, env): cmd
+                for cmd, timeout, env in dependent_tasks
+            }
+            for future in concurrent.futures.as_completed(futures):
+                log.append(future.result())
+    else:
+        print(
+            "Phase 2 skipped — no dependent tasks (breadth and VCP both failed).", file=sys.stderr
+        )
 
     # Save snapshot to DB if successful
     snapshot = _collect_snapshot(market)
-    
+
     # Verify if the run was successful (must have valid breadth and vcp data)
     breadth = snapshot.get("breadth")
     vcp = snapshot.get("vcp")
     is_success = (
-        breadth and isinstance(breadth, dict) and breadth.get("composite") and
-        vcp and isinstance(vcp, dict)
+        breadth
+        and isinstance(breadth, dict)
+        and breadth.get("composite")
+        and vcp
+        and isinstance(vcp, dict)
     )
-    
+
     if is_success:
         run_at = db_save_run(market, snapshot)
         status = "success"
     else:
         run_at = None
         status = "failed"
-        print(f"Warning: Run at {datetime.now().isoformat()} was unsuccessful and not saved to DB.", file=sys.stderr)
-        
+        print(
+            f"Warning: Run at {datetime.now().isoformat()} was unsuccessful and not saved to DB.",
+            file=sys.stderr,
+        )
+
     cleanup_old_files(keep_count=2)
     clean_unsuccessful_db_runs()
 
@@ -378,11 +691,92 @@ def api_run():
 
 @app.route("/api/history/<symbol>")
 def api_history(symbol):
+    from datetime import date
+
     try:
+        sys.path.insert(0, os.path.join(BASE_DIR, "scripts"))
+        from cache_manager import CacheManager
+
+        cache = CacheManager(DB_PATH)
+
+        # Helper to determine if cached data is fresh, accounting for weekends and market hours
+        def is_cache_fresh(symbol_str) -> bool:
+            latest = cache.latest_bar_date(symbol_str)
+            if not latest:
+                return False
+            today = date.today()
+            diff = (today - latest).days
+            if diff <= 0:  # Cache has today's data
+                return True
+
+            today_wd = today.weekday()  # Monday=0, Sunday=6
+            if today_wd == 5:  # Saturday (Friday was 1 day ago)
+                return diff <= 1
+            if today_wd == 6:  # Sunday (Friday was 2 days ago)
+                return diff <= 2
+
+            # Weekdays (Monday-Friday)
+            # If it's after market close, we expect today's data (diff should be 0)
+            from datetime import datetime
+
+            now_dt = datetime.now()
+            if symbol_str.endswith(".BK"):
+                # Thai market closes at 16:30. After 17:00 local time, today's data is available.
+                if now_dt.hour >= 17:
+                    return False
+                return diff <= 1
+            else:
+                # US market closes at 03:00/04:00 AM Thai time.
+                # During Thai daytime, yesterday's US bar is the latest.
+                # After US market closes (approx 04:00 AM Thai time), today's bar is available.
+                if now_dt.hour >= 5:
+                    return diff <= 1
+                return diff <= 2
+
+        # Try local cache first if it is fresh
+        if is_cache_fresh(symbol):
+            try:
+                bars = cache.get_bars(symbol, 260)
+                if bars and len(bars) >= 50:
+                    history = [
+                        {
+                            "time": b["date"],
+                            "open": float(b["open"]),
+                            "high": float(b["high"]),
+                            "low": float(b["low"]),
+                            "close": float(b["close"]),
+                            "value": float(b["volume"]),
+                        }
+                        for b in reversed(bars)
+                    ]
+                    return jsonify(history)
+            except Exception as ce:
+                print(f"Cache lookup failed for {symbol}: {ce}", file=sys.stderr)
+
+        # Fallback to Live download (stale cache or no cache)
         ticker = yf.Ticker(symbol)
         df = ticker.history(period="1y")
         if df.empty:
+            # If live download fails but we have some cached data, return cached data as fallback
+            try:
+                bars = cache.get_bars(symbol, 260)
+                if bars and len(bars) >= 50:
+                    history = [
+                        {
+                            "time": b["date"],
+                            "open": float(b["open"]),
+                            "high": float(b["high"]),
+                            "low": float(b["low"]),
+                            "close": float(b["close"]),
+                            "value": float(b["volume"]),
+                        }
+                        for b in reversed(bars)
+                    ]
+                    return jsonify(history)
+            except Exception:
+                pass
             return jsonify({"error": "No data found"}), 404
+
         df = df.reset_index()
         history = [
             {
@@ -395,6 +789,24 @@ def api_history(symbol):
             }
             for _, row in df.iterrows()
         ]
+
+        # Save back to CacheManager to update the local database cache
+        try:
+            db_bars = [
+                {
+                    "date": h["time"],
+                    "open": h["open"],
+                    "high": h["high"],
+                    "low": h["low"],
+                    "close": h["close"],
+                    "volume": int(h["value"]),
+                }
+                for h in history
+            ]
+            cache.upsert_bars(symbol, db_bars)
+        except Exception as err:
+            print(f"Failed to upsert updated bars for {symbol} to cache: {err}", file=sys.stderr)
+
         return jsonify(history)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -415,22 +827,124 @@ def api_db_stats():
                 GROUP BY market
                 ORDER BY market
             """).fetchall()
-            price_stats = conn.execute("""
-                SELECT COUNT(DISTINCT symbol) AS symbols,
-                       COUNT(*)               AS total_bars,
-                       MIN(date)              AS oldest_bar,
-                       MAX(date)              AS newest_bar
-                FROM price_bar
-            """).fetchone()
-        return jsonify({
-            "analysis_runs": [dict(r) for r in rows],
-            "price_cache": dict(price_stats) if price_stats else {},
-        })
+            try:
+                price_stats = conn.execute("""
+                    SELECT COUNT(DISTINCT symbol) AS symbols,
+                           COUNT(*)               AS total_bars,
+                           MIN(date)              AS oldest_bar,
+                           MAX(date)              AS newest_bar
+                    FROM price_bar
+                """).fetchone()
+                price_cache = dict(price_stats) if price_stats else {}
+            except Exception:
+                price_cache = {}
+        return jsonify(
+            {
+                "analysis_runs": [dict(r) for r in rows],
+                "price_cache": price_cache,
+            }
+        )
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+# ── Paper Trade Simulator ────────────────────────────────────────────────────
+
+
+@app.route("/api/paper/open", methods=["POST"])
+def api_paper_open():
+    """Open a new paper position. JSON body required."""
+    try:
+        d = request.get_json(force=True) or {}
+        row = paper_open(
+            symbol=d["symbol"],
+            market=d["market"],
+            shares=int(d["shares"]),
+            entry=float(d["entry"]),
+            stop=float(d["stop"]),
+            target=float(d["target"]),
+            side=d.get("side", "long"),
+            source=d.get("source"),
+            source_score=d.get("source_score"),
+            notes=d.get("notes"),
+            emotion=d.get("emotion"),
+        )
+        hf_sync.upload_db()
+        return jsonify(_clean_nan(row))
+    except (KeyError, ValueError) as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/paper/close", methods=["POST"])
+def api_paper_close():
+    """Close an open position. JSON: {id, exit_price, status?, emotion?, notes?}"""
+    try:
+        d = request.get_json(force=True) or {}
+        row = paper_close(
+            trade_id=int(d["id"]),
+            exit_price=float(d["exit_price"]),
+            status=d.get("status", "closed_manual"),
+            emotion=d.get("emotion"),
+            notes=d.get("notes"),
+        )
+        hf_sync.upload_db()
+        return jsonify(_clean_nan(row))
+    except (KeyError, ValueError) as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/paper/list")
+def api_paper_list():
+    """List positions. Query: ?status=open|closed|all&market=TH|US"""
+    status = request.args.get("status", "all")
+    market = request.args.get("market")
+    rows = paper_list(status, market)
+    return jsonify(_clean_nan(rows))
+
+
+@app.route("/api/paper/stats")
+def api_paper_stats():
+    """Portfolio statistics. Query: ?market=TH|US"""
+    market = request.args.get("market")
+    return jsonify(_clean_nan(paper_stats(market)))
+
+
+@app.route("/api/paper/update_marks", methods=["POST"])
+def api_paper_update_marks():
+    """Refresh prices for all open positions; auto-trigger stop/target."""
+    try:
+        results = paper_update_marks()
+        hf_sync.upload_db()
+        return jsonify(_clean_nan({"updated": len(results), "results": results}))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/paper/journal", methods=["POST"])
+def api_paper_journal():
+    """Add journal entry to a trade. JSON: {id, text, emotion?}"""
+    try:
+        d = request.get_json(force=True) or {}
+        row = paper_journal(int(d["id"]), d["text"], d.get("emotion"))
+        hf_sync.upload_db()
+        return jsonify(_clean_nan(row))
+    except (KeyError, ValueError) as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/paper/emotions")
+def api_paper_emotions():
+    """Return valid emotion tags."""
+    return jsonify(sorted(VALID_EMOTIONS))
 
 
 if __name__ == "__main__":
     cleanup_old_files(keep_count=2)
     clean_unsuccessful_db_runs()
-    app.run(debug=True, port=5050)
+    app.run(debug=True, use_reloader=False, port=5050)
