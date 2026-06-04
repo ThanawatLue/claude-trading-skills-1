@@ -72,6 +72,7 @@ This path lets you review market conditions, size trades, journal decisions, and
 - `skill-packages/` – Pre-built `.skill` archives ready to upload to Claude's web app **Skills** tab.
 - `docs/` – Documentation site content, generated skill pages, and `docs/dev/metadata-and-workflow-schema.md` (schema spec).
 - `scripts/` – Repository-level automation, including the schema validator and one-shot bootstrap helper.
+- `dashboard/` – Flask + Lightweight Charts UI for visualising every skill's output. Features dark/light theme toggle (☾/☼), Paper Portfolio with 1-click "Add to Paper" buttons, expandable chart per position, watchlist criteria tooltips, currency-aware P/L, drawdown alerts. Run with `python3 dashboard/app.py` → `http://127.0.0.1:5050`.
 - `skillsets/` – Planned skillset manifests for bundled workflows (vision Phase 2, not yet present).
 
 ## Getting Started
@@ -123,6 +124,8 @@ The detailed catalog below is **auto-generated** from `skills-index.yaml` by `sc
 | **Market News Analyst** (`market-news-analyst`) | This skill should be used when analyzing recent market-moving news events and their impact on equity markets and commodities. | `websearch` **required** | production |
 | **Market Top Detector** (`market-top-detector`) | Detects market top probability using O'Neil Distribution Days, Minervini Leading Stock Deterioration, and Monty Defensive Sector Rotation. | `public_csv` **required** | production |
 | **Sector Analyst** (`sector-analyst`) | This skill should be used when analyzing sector rotation patterns and market cycle positioning. | `chart_image` **required** | production |
+| **Thai Breadth Analyzer** (`thai-breadth-analyzer`) | SET breadth — % above SMA50/200, A/D ratio, new 52w highs/lows, RSI distribution. TV-only. | `tradingview` **required** | production |
+| **Thai Sector Heatmap** (`thai-sector-heatmap`) | Group SET stocks by sector and rank by median performance (1M/3M/6M/1Y). TV-only — no API key needed. | `tradingview` **required** | production |
 | **Uptrend Analyzer** (`uptrend-analyzer`) | Analyzes market breadth using Monty's Uptrend Ratio Dashboard data to diagnose the current market environment. | `public_csv` **required** | production |
 | **US Market Bubble Detector** (`us-market-bubble-detector`) | Evaluates market bubble risk through quantitative data-driven analysis using the revised Minsky/Kindleberger framework v2.1. | `user_input` **required** | production |
 
@@ -135,6 +138,7 @@ The detailed catalog below is **auto-generated** from `skills-index.yaml` by `sc
 | **Kanchi Dividend SOP** (`kanchi-dividend-sop`) | Convert Kanchi-style dividend investing into a repeatable US-stock operating procedure. | `fmp` _recommended_ | production |
 | **Kanchi Dividend US Tax Accounting** (`kanchi-dividend-us-tax-accounting`) | Provide US dividend tax and account-location workflow for Kanchi-style income portfolios. | `local_calculation` — | production |
 | **Portfolio Manager** (`portfolio-manager`) | Comprehensive portfolio analysis using Alpaca MCP Server integration to fetch holdings and positions, then analyze asset allocation, risk metrics, individual stock positions, diversification, and generate rebalancing recommendations. | `alpaca` **required** | production |
+| **Thai Dividend Screener** (`thai-dividend-screener`) | SET dividend income screener — SETHD universe + yield > 4% + P/E filter + above SMA200. TV-only, no FMP needed. | `tradingview` **required** | production |
 | **Value Dividend Screener** (`value-dividend-screener`) | Screen US stocks for high-quality dividend opportunities combining value characteristics (P/E ratio under 20, P/B ratio under 2), attractive yields (3% or higher), and consistent growth (dividend/revenue/EPS trending up over 3 years). | `fmp` **required**, `finviz` _recommended_ | production |
 
 ### Swing Opportunity
@@ -144,13 +148,15 @@ The detailed catalog below is **auto-generated** from `skills-index.yaml` by `sc
 | **Breakout Trade Planner** (`breakout-trade-planner`) | Generate Minervini-style breakout trade plans from VCP screener output with worst-case risk calculation, portfolio heat management, and Alpaca-compatible order templates (stop-limit bracket for pre-placement, limit bracket for post-confi... | `local_calculation` — | production |
 | **CANSLIM Screener** (`canslim-screener`) | Screen US stocks using William O'Neil's CANSLIM growth stock methodology. | `fmp` **required** | production |
 | **Finviz Screener** (`finviz-screener`) | Build and open FinViz screener URLs from natural language requests. | `finviz` optional | production |
+| **Thai Watchlist Builder** (`thai-watchlist-builder`) | Auto-curated daily watchlists for SET — 4 buckets (Growth, Value, Momentum, Mean-Reversion). TV-only. | `tradingview` **required** | production |
 | **Theme Detector** (`theme-detector`) | Detect and analyze trending market themes across sectors. | `fmp` optional, `finviz` _recommended_ | production |
-| **VCP Screener** (`vcp-screener`) | Screen S&P 500 stocks for Mark Minervini's Volatility Contraction Pattern (VCP). | `fmp` **required** | production |
+| **VCP Screener** (`vcp-screener`) | Screen S&P 500 (US) or SET (TH) stocks for Mark Minervini's Volatility Contraction Pattern. Includes Thai Swing momentum/dip-buy variants using TV+yfinance hybrid. | `fmp` **required**, `tradingview` optional, `yfinance` optional | production |
 
 ### Trade Planning
 
 | Skill | Summary | Integrations | Status |
 |---|---|---|---|
+| **Paper Trade Simulator** (`paper-trade-simulator`) | Simulate trades without real money. Dashboard-integrated — 📝 next to ★ on every screener row → modal with live risk calculator + emotion pills. Tracks R-multiples, MAE/MFE, stop-respect rate, patience score (cut-winner detector), per-position 1Y chart. | `yfinance` **required**, `sqlite` **required** | production |
 | **Position Sizer** (`position-sizer`) | Calculate risk-based position sizes for long stock trades. | `local_calculation` — | production |
 | **Technical Analyst** (`technical-analyst`) | This skill should be used when analyzing weekly price charts for stocks, stock indices, cryptocurrencies, or forex pairs. | `chart_image` **required** | production |
 | **US Stock Analysis** (`us-stock-analysis`) | Comprehensive US stock analysis including fundamental analysis (financial metrics, business quality, valuation), technical analysis (indicators, chart patterns, support/resistance), stock comparisons, and investment report generation. | `user_input` **required** | production |

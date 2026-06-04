@@ -1117,19 +1117,138 @@ skills:
   display_name: VCP Screener
   category: swing-opportunity
   status: production
-  summary: Screen S&P 500 stocks for Mark Minervini's Volatility Contraction Pattern (VCP).
+  summary: Screen S&P 500 (US) or SET (TH) stocks for Mark Minervini's Volatility Contraction Pattern. Includes Thai Swing momentum/dip-buy variants using TV+yfinance hybrid.
   timeframe: daily
   difficulty: intermediate
   integrations:
   - id: fmp
     type: market_data
     requirement: required
-    note: S&P 500 OHLCV via FMP
+    note: S&P 500 OHLCV via FMP (US market)
+  - id: tradingview
+    type: market_data
+    requirement: optional
+    note: TV Screener for TH market universe (~800 SET stocks in one call, no API key)
+  - id: yfinance
+    type: market_data
+    requirement: optional
+    note: yfinance for TH OHLCV bars (.BK suffix) + ATR calculation
   inputs:
   - sp500_ohlcv
+  - set_universe_snapshot
   outputs:
   - vcp_candidates
   - pivot_points
+  - thai_swing_setups
   workflows:
   - swing-opportunity-daily
+  hand_written_doc: false
+
+- id: thai-sector-heatmap
+  display_name: Thai Sector Heatmap
+  category: market-regime
+  status: production
+  summary: Group SET stocks by sector and rank by median performance (1M/3M/6M/1Y). TV-only — no API key needed.
+  timeframe: daily
+  difficulty: beginner
+  integrations:
+  - id: tradingview
+    type: market_data
+    requirement: required
+    note: TV Screener bulk fetch (free, no key)
+  inputs:
+  - set_universe_snapshot
+  outputs:
+  - sector_ranking
+  - momentum_scores
+  workflows: []
+  hand_written_doc: false
+
+- id: thai-breadth-analyzer
+  display_name: Thai Breadth Analyzer
+  category: market-regime
+  status: production
+  summary: SET breadth — % above SMA50/200, A/D ratio, new 52w highs/lows, RSI distribution. TV-only.
+  timeframe: daily
+  difficulty: beginner
+  integrations:
+  - id: tradingview
+    type: market_data
+    requirement: required
+    note: TV Screener for breadth snapshot
+  inputs:
+  - set_universe_snapshot
+  outputs:
+  - breadth_metrics
+  - regime_classification
+  workflows: []
+  hand_written_doc: false
+
+- id: thai-watchlist-builder
+  display_name: Thai Watchlist Builder
+  category: swing-opportunity
+  status: production
+  summary: Auto-curated daily watchlists for SET — 4 buckets (Growth, Value, Momentum, Mean-Reversion). TV-only.
+  timeframe: daily
+  difficulty: beginner
+  integrations:
+  - id: tradingview
+    type: market_data
+    requirement: required
+    note: TV Screener with multi-criteria filters
+  inputs:
+  - set_universe_snapshot
+  outputs:
+  - growth_bucket
+  - value_bucket
+  - momentum_bucket
+  - mean_reversion_bucket
+  workflows: []
+  hand_written_doc: false
+
+- id: thai-dividend-screener
+  display_name: Thai Dividend Screener
+  category: core-portfolio
+  status: production
+  summary: SET dividend income screener — SETHD universe + yield > 4% + P/E filter + above SMA200. TV-only, no FMP needed.
+  timeframe: weekly
+  difficulty: beginner
+  integrations:
+  - id: tradingview
+    type: market_data
+    requirement: required
+    note: TV Screener gives yield + P/E + SETHD membership
+  inputs:
+  - set_universe_snapshot
+  outputs:
+  - dividend_candidates
+  - grading
+  workflows: []
+  hand_written_doc: false
+
+- id: paper-trade-simulator
+  display_name: Paper Trade Simulator
+  category: trade-planning
+  status: production
+  summary: Simulate trades without real money. Dashboard-integrated — 📝 next to ★ on every screener row → modal with live risk calculator + emotion pills. Tracks R-multiples, MAE/MFE, stop-respect rate, patience score (cut-winner detector), per-position 1Y chart.
+  timeframe: daily
+  difficulty: beginner
+  integrations:
+  - id: yfinance
+    type: market_data
+    requirement: required
+    note: yfinance for mark-to-market price updates (free)
+  - id: sqlite
+    type: local_file
+    requirement: required
+    note: Shares state/market_cache.db with dashboard (paper_trade table)
+  inputs:
+  - pick_entry_stop_target
+  - shares
+  outputs:
+  - open_positions
+  - closed_trades
+  - portfolio_stats
+  - discipline_metrics
+  workflows: []
   hand_written_doc: false
