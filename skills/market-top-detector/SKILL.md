@@ -17,21 +17,12 @@ Unlike the Bubble Detector (macro/multi-month evaluation), this skill focuses on
 
 ## When to Use This Skill
 
-**English:**
 - User asks "Is the market topping?" or "Are we near a top?"
 - User notices distribution days accumulating
 - User observes defensive sectors outperforming growth
 - User sees leading stocks breaking down while indices hold
 - User asks about reducing equity exposure timing
 - User wants to assess correction probability for the next 2-8 weeks
-
-**Japanese:**
-- 「天井が近い？」「今は利確すべき？」
-- ディストリビューションデーの蓄積を懸念
-- ディフェンシブセクターがグロースをアウトパフォーム
-- 先導株が崩れ始めているが指数はまだ持ちこたえている
-- エクスポージャー縮小のタイミング判断
-- 今後2〜8週間の調整確率を評価したい
 
 ## Prerequisites
 

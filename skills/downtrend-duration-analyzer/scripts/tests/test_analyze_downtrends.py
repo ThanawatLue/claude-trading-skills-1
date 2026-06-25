@@ -5,14 +5,23 @@ Tests peak/trough detection, downtrend identification, and statistics computatio
 """
 
 import pandas as pd
+import numpy as np
+import unittest
+from unittest.mock import patch
+import sys
+from io import StringIO
+from pathlib import Path
+import json
+
 from analyze_downtrends import (
     compute_statistics,
     detect_peaks_troughs,
     find_downtrends,
     get_market_cap_tier,
     group_statistics,
+    analyze_symbol, # Added for TestAnalyzeSymbol
+    main, # Import main for integration tests
 )
-
 
 class TestGetMarketCapTier:
     """Tests for market cap tier classification."""
@@ -256,3 +265,123 @@ class TestGroupStatistics:
         assert "Small" in grouped
         assert grouped["Mega"]["median_days"] == 12  # (10 + 15) / 2 rounded
         assert grouped["Small"]["median_days"] == 30
+
+
+class TestAnalyzeSymbol(unittest.TestCase):
+    """Tests for analyze_symbol function."""
+
+    @patch("analyze_downtrends._yf_fetch_prices")
+    def test_no_data(self, mock_fetch_historical_prices):
+        """Test analyze_symbol with no historical prices."""
+        mock_fetch_historical_prices.return_value = pd.DataFrame()
+        result = analyze_symbol("SMBL", "Tech", 100e9, "2023-01-01", "2023-12-31", 20, 20, 5.0, 3)
+        self.assertEqual(result, [])
+
+    @patch("analyze_downtrends._yf_fetch_prices")
+    def test_insufficient_data_for_window(self, mock_fetch_historical_prices):
+        """Test analyze_symbol with insufficient data for peak/trough window."""
+        dates = pd.date_range("2023-01-01", periods=10)
+        closes = [100 + i for i in range(10)]
+        mock_fetch_historical_prices.return_value = pd.DataFrame({"date": dates, "close": closes})
+        result = analyze_symbol("SMBL", "Tech", 100e9, "2023-01-01", "2023-12-31", 20, 20, 5.0, 3)
+        self.assertEqual(result, [])
+
+    @patch("analyze_downtrends._yf_fetch_prices")
+    def test_no_downtrends_detected(self, mock_fetch_historical_prices):
+        """Test analyze_symbol when no downtrends are detected."""
+        dates = pd.date_range("2023-01-01", periods=100)
+        closes = [100 + i for i in range(100)]  # Constantly increasing prices
+        mock_fetch_historical_prices.return_value = pd.DataFrame({"date": dates, "close": closes})
+        result = analyze_symbol("SMBL", "Tech", 100e9, "2023-01-01", "2023-12-31", 10, 10, 5.0, 3)
+        self.assertEqual(result, [])
+
+    @patch("analyze_downtrends._yf_fetch_prices")
+    def test_downtrend_detection_success(self, mock_fetch_historical_prices):
+        """Test analyze_symbol successfully detects a downtrend."""
+        dates = pd.date_range("2023-01-01", periods=50)
+        # Prices: peak, then trough
+        closes = [100] * 10 + list(np.linspace(100, 80, 20)) + [80] * 20
+        prices_df = pd.DataFrame({"date": dates, "close": closes})
+        mock_fetch_historical_prices.return_value = prices_df
+
+        result = analyze_symbol("SMBL", "Tech", 100e9, "2023-01-01", "2023-12-31", 5, 5, 5.0, 3)
+        self.assertGreater(len(result), 0)
+        self.assertIn("symbol", result[0])
+        self.assertIn("market_cap_tier", result[0])
+        self.assertEqual(result[0]["symbol"], "SMBL")
+        self.assertEqual(result[0]["market_cap_tier"], "Large")
+
+
+# Integration tests for the main function
+class TestMainIntegration(unittest.TestCase):
+    @patch("analyze_downtrends.fetch_sp500_list")
+    @patch("analyze_downtrends._yf_fetch_prices")
+    @patch("pathlib.Path.mkdir")
+    @patch("pathlib.Path.write_text")
+    @patch("json.dump")
+    def test_main_function_execution(
+        self,
+        mock_json_dump,
+        mock_write_text,
+        mock_mkdir,
+        mock_fetch_historical_prices,
+        mock_fetch_sp500_list,
+    ):
+        # Mock fetch_sp500_list to return a sample stock
+        mock_fetch_sp500_list.return_value = [
+            {"symbol": "SMBL", "sector": "Technology", "marketCap": 100e9}
+        ]
+
+        # Mock fetch_historical_prices to return data with a downtrend
+        dates = pd.date_range("2023-01-01", periods=100)
+        closes = (
+            [100] * 20
+            + list(np.linspace(100, 70, 30))
+            + [70] * 20
+            + list(np.linspace(70, 90, 30))
+        )
+        mock_fetch_historical_prices.return_value = pd.DataFrame(
+            {"date": dates, "close": closes}
+        )
+
+        # Redirect stdout to capture print statements
+        old_stdout = sys.stdout
+        sys.stdout = new_stdout = StringIO()
+
+        try:
+            # Run the main function with some arguments
+            test_args = [
+                "analyze_downtrends.py",
+                "--lookback-years", "1",
+                "--max-stocks", "1",
+                "--output-dir", "test_reports",
+                "--min-duration-days", "5"
+            ]
+            with patch.object(sys, 'argv', test_args):
+                main()
+
+            # Assertions
+            mock_fetch_sp500_list.assert_called_once()
+            mock_fetch_historical_prices.assert_called_once()
+            mock_mkdir.assert_called_once() # Should create output directory
+            mock_json_dump.assert_called_once() # Should write JSON report
+            mock_write_text.assert_called_once() # Should write Markdown report
+
+            # Check if print statements indicate progress/completion
+            output = new_stdout.getvalue()
+            self.assertIn("Analyzing downtrends from", output)
+            self.assertIn("Analyzing 1 stocks...", output)
+            self.assertIn("Found 1 downtrend periods", output)
+            self.assertIn("JSON report saved to:", output)
+            self.assertIn("Markdown report saved to:", output)
+
+            # Further checks on the arguments passed to json.dump or write_text
+            # You would need to inspect mock_json_dump.call_args[0][0]
+            # for specific content of the JSON output and similarly for markdown
+            json_output = mock_json_dump.call_args[0][0]
+            self.assertIn("summary", json_output)
+            self.assertGreater(json_output["summary"]["total_downtrends"], 0)
+            self.assertEqual(json_output["parameters"]["min_duration_days"], 5)
+
+        finally:
+            sys.stdout = old_stdout # Restore stdout

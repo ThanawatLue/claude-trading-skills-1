@@ -14,6 +14,38 @@ import sys
 from dataclasses import dataclass
 from datetime import datetime
 
+def get_latest_posture(market: str, reports_dir: str = "reports") -> dict | None:
+    """Find and load the latest exposure posture JSON report for the target market."""
+    import glob
+    from pathlib import Path
+    
+    base_dir = Path(__file__).resolve().parents[3]
+    rep_path = base_dir / reports_dir
+    if not rep_path.exists():
+        return None
+        
+    pattern = str(rep_path / "exposure_posture_*.json")
+    files = glob.glob(pattern)
+    if not files:
+        return None
+        
+    postures = []
+    for f in files:
+        try:
+            with open(f) as file_obj:
+                data = json.load(file_obj)
+                mkt = data.get("metadata", {}).get("market", "US").upper()
+                if mkt == market.upper():
+                    postures.append((f, data))
+        except (FileNotFoundError, json.JSONDecodeError):
+            continue
+            
+    if not postures:
+        return None
+        
+    postures.sort(key=lambda x: os.path.basename(x[0]), reverse=True)
+    return postures[0][1]
+
 
 @dataclass
 class SizingParameters:
@@ -30,6 +62,8 @@ class SizingParameters:
     max_sector_pct: float | None = None
     sector: str | None = None
     current_sector_exposure: float = 0.0
+    market: str = "US"
+    ignore_posture: bool = False
 
 
 def validate_parameters(params: SizingParameters) -> None:
@@ -173,6 +207,26 @@ def calculate_position(params: SizingParameters) -> dict:
     """
     validate_parameters(params)
 
+    # Determine risk multiplier based on posture
+    posture_rec = "NEW_ENTRY_ALLOWED"
+    posture_ceiling = 100
+    risk_multiplier = 1.0
+    posture_data = None
+    
+    if not params.ignore_posture:
+        posture_data = get_latest_posture(params.market)
+        if posture_data:
+            posture_rec = posture_data.get("recommendation", "NEW_ENTRY_ALLOWED")
+            posture_ceiling = posture_data.get("exposure_ceiling_pct", 100)
+            if posture_rec == "CASH_PRIORITY":
+                risk_multiplier = 0.0
+            elif posture_rec == "REDUCE_ONLY":
+                risk_multiplier = 0.5
+
+    # Scale risk percentage if provided
+    if params.risk_pct is not None:
+        params.risk_pct *= risk_multiplier
+
     is_kelly_mode = params.win_rate is not None
     has_entry = params.entry_price is not None
 
@@ -184,6 +238,8 @@ def calculate_position(params: SizingParameters) -> dict:
     if is_kelly_mode and not has_entry:
         # Budget mode: Kelly without entry price
         kelly = calculate_kelly(params)
+        # Apply risk multiplier to budget mode half_kelly
+        kelly["half_kelly_pct"] = round(kelly["half_kelly_pct"] * risk_multiplier, 2)
         result["mode"] = "budget"
         result["parameters"] = {
             "win_rate": params.win_rate,
@@ -200,6 +256,13 @@ def calculate_position(params: SizingParameters) -> dict:
         result["recommended_risk_budget"] = round(budget, 2)
         result["recommended_risk_budget_pct"] = kelly["half_kelly_pct"]
         result["note"] = "To calculate shares, re-run with --entry and --stop"
+        result["posture_applied"] = {
+            "market": params.market,
+            "recommendation": posture_rec,
+            "exposure_ceiling_pct": posture_ceiling,
+            "risk_multiplier": risk_multiplier,
+            "source_timestamp": posture_data.get("generated_at") if posture_data else None
+        }
         return result
 
     # Shares mode
@@ -219,7 +282,8 @@ def calculate_position(params: SizingParameters) -> dict:
     if is_kelly_mode:
         kelly = calculate_kelly(params)
         calculations["kelly"] = kelly
-        # Use half-kelly budget to determine shares
+        # Use half-kelly budget to determine shares, scaled by risk multiplier
+        kelly["half_kelly_pct"] = round(kelly["half_kelly_pct"] * risk_multiplier, 2)
         budget = params.account_size * kelly["half_kelly_pct"] / 100
         if params.stop_price:
             risk_per_share = params.entry_price - params.stop_price
@@ -267,6 +331,13 @@ def calculate_position(params: SizingParameters) -> dict:
         result["final_risk_pct"] = None
         result["risk_note"] = "Stop-loss not defined. Specify --stop to calculate risk dollars."
     result["binding_constraint"] = binding
+    result["posture_applied"] = {
+        "market": params.market,
+        "recommendation": posture_rec,
+        "exposure_ceiling_pct": posture_ceiling,
+        "risk_multiplier": risk_multiplier,
+        "source_timestamp": posture_data.get("generated_at") if posture_data else None
+    }
 
     return result
 
@@ -278,8 +349,18 @@ def generate_markdown_report(result: dict) -> str:
         "**Generated:** {}".format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
         "**Mode:** {}".format(result["mode"]),
         "",
-        "## Parameters",
     ]
+    if result.get("posture_applied"):
+        pa = result["posture_applied"]
+        lines.extend([
+            "## Market Posture Integration",
+            f"- **Market:** {pa['market']}",
+            f"- **Recommendation:** {pa['recommendation']}",
+            f"- **Exposure Ceiling:** {pa['exposure_ceiling_pct']}%",
+            f"- **Risk Multiplier:** {pa['risk_multiplier']}x",
+            ""
+        ])
+    lines.append("## Parameters")
     for k, v in result.get("parameters", {}).items():
         lines.append(f"- **{k}:** {v}")
     lines.append("")
@@ -396,6 +477,17 @@ def build_parser() -> argparse.ArgumentParser:
         default="reports/",
         help="Output directory for reports",
     )
+    parser.add_argument(
+        "--market",
+        choices=["US", "TH"],
+        default="US",
+        help="Market for posture-aware sizing (default: US)"
+    )
+    parser.add_argument(
+        "--ignore-posture",
+        action="store_true",
+        help="Disable posture-aware risk scaling"
+    )
     return parser
 
 
@@ -434,6 +526,8 @@ def main() -> None:
         max_sector_pct=args.max_sector_pct,
         sector=args.sector,
         current_sector_exposure=args.current_sector_exposure,
+        market=args.market,
+        ignore_posture=args.ignore_posture,
     )
 
     try:

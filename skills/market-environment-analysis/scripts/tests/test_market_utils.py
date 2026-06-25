@@ -2,9 +2,10 @@
 """Tests for market_utils.py"""
 
 import sys
-from datetime import datetime
+from datetime import datetime, time
 from pathlib import Path
 from unittest.mock import patch
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -141,14 +142,54 @@ class TestCategorizeVolatility:
 
 
 class TestGetMarketStatus:
-    def test_returns_string(self):
-        result = get_market_status()
-        assert isinstance(result, str)
+    @patch("market_utils.datetime")
+    def test_get_market_status_tokyo_trading(self, mock_datetime_module):
+        # Mon Jan 6, 2025 02:00 UTC -> 11:00 JST -> Tokyo Market: Trading
+        utc_now = datetime(2025, 1, 6, 2, 0, tzinfo=ZoneInfo("UTC"))
+        mock_datetime_module.now.return_value = utc_now
+        mock_datetime_module.now.side_effect = lambda tz=None: utc_now if tz is None else utc_now.astimezone(tz)
+        mock_datetime_module.time = time
+        mock_datetime_module.strptime = datetime.strptime
 
-    def test_contains_market_names(self):
         result = get_market_status()
-        assert "Tokyo" in result
-        assert "US" in result
+        assert "🟢 Tokyo Market: Trading" in result
+
+    @patch("market_utils.datetime")
+    def test_get_market_status_tokyo_closed(self, mock_datetime_module):
+        # Mon Jan 6, 2025 07:00 UTC -> 16:00 JST -> Tokyo Market: Closed
+        utc_now = datetime(2025, 1, 6, 7, 0, tzinfo=ZoneInfo("UTC"))
+        mock_datetime_module.now.return_value = utc_now
+        mock_datetime_module.now.side_effect = lambda tz=None: utc_now if tz is None else utc_now.astimezone(tz)
+        mock_datetime_module.time = time
+        mock_datetime_module.strptime = datetime.strptime
+
+        result = get_market_status()
+        assert "🔴 Tokyo Market: Closed" in result
+
+    @patch("market_utils.datetime")
+    def test_get_market_status_tokyo_premarket(self, mock_datetime_module):
+        # Mon Jan 6, 2025 22:00 UTC -> Tue Jan 7, 07:00 JST -> Tokyo Market: Pre-market/After hours
+        utc_now = datetime(2025, 1, 6, 22, 0, tzinfo=ZoneInfo("UTC"))
+        mock_datetime_module.now.return_value = utc_now
+        mock_datetime_module.now.side_effect = lambda tz=None: utc_now if tz is None else utc_now.astimezone(tz)
+        mock_datetime_module.time = time
+        mock_datetime_module.strptime = datetime.strptime
+
+        result = get_market_status()
+        assert "⏰ Tokyo Market: Pre-market/After hours" in result
+
+    @patch("market_utils.datetime")
+    def test_get_market_status_weekend(self, mock_datetime_module):
+        # Sat Jan 4, 2025 12:00 UTC -> Saturday -> All markets closed
+        utc_now = datetime(2025, 1, 4, 12, 0, tzinfo=ZoneInfo("UTC"))
+        mock_datetime_module.now.return_value = utc_now
+        mock_datetime_module.now.side_effect = lambda tz=None: utc_now if tz is None else utc_now.astimezone(tz)
+        mock_datetime_module.time = time
+        mock_datetime_module.strptime = datetime.strptime
+
+        result = get_market_status()
+        for market in ["Tokyo", "New York", "London", "Shanghai", "Hong Kong", "Singapore"]:
+            assert f"🔴 {market} Market: Closed" in result
 
 
 class TestGenerateChecklist:

@@ -124,8 +124,10 @@ def _run_thai_analysis(args):
     
     for sym, hist in histories.items():
         if not hist: continue
-        close = hist[0]['close']
-        prices = [h['close'] for h in hist]
+        valid_bars = [h for h in hist if h.get('close') is not None]
+        if not valid_bars: continue
+        close = valid_bars[0]['close']
+        prices = [h['close'] for h in valid_bars]
         
         # Simple SMA calculation
         sma50 = sum(prices[:50]) / 50 if len(prices) >= 50 else 0

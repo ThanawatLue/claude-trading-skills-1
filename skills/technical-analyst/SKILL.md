@@ -17,9 +17,12 @@ This skill enables comprehensive technical analysis of weekly price charts. Anal
 - Want probabilistic scenario planning with specific price targets
 - Require objective chart-based analysis without fundamental or news considerations
 
+## Input
+
+- **Chart Images**: User must provide weekly timeframe chart images as file paths accessible to the agent, or embedded Base64 strings in the prompt for direct processing.
+
 ## Prerequisites
 
-- **Chart Images**: User must provide weekly timeframe chart images for analysis
 - **No API Keys Required**: This skill analyzes user-provided images; no external data fetches
 
 ## Output
@@ -52,7 +55,7 @@ When the user provides one or more weekly chart images for analysis:
 Before beginning analysis, read the comprehensive technical analysis methodology:
 
 ```
-Read: references/technical_analysis_framework.md
+Read: ./references/technical_analysis_framework.md
 ```
 
 This reference contains detailed guidance on:
@@ -134,7 +137,7 @@ Adjust probabilities based on strength of supporting technical factors. Ensure p
 For each chart analyzed, create a comprehensive markdown report using the template structure:
 
 ```
-Read and use as template: assets/analysis_template.md
+Read and use as template: ./assets/analysis_template.md
 ```
 
 The report must include all sections:
@@ -151,7 +154,7 @@ The report must include all sections:
 
 **File Naming Convention**: Save each analysis as `[SYMBOL]_technical_analysis_[YYYY-MM-DD].md`
 
-Example: `SPY_technical_analysis_2025-11-02.md`
+Example: `SPY_technical_analysis_[CURRENT_DATE].md`
 
 ### Step 6: Repeat for Multiple Charts
 
@@ -203,7 +206,7 @@ Analyst:
 3. Conducts systematic analysis (trend, S/R, MA, volume, patterns)
 4. Develops 3 scenarios with probabilities (e.g., 55% bullish continuation, 30% consolidation, 15% reversal)
 5. Generates comprehensive analysis report using template
-6. Saves as SPY_technical_analysis_2025-11-02.md
+6. Saves as SPY_technical_analysis_[CURRENT_DATE].md
 ```
 
 **Example 2: Multiple Chart Analysis**
@@ -214,9 +217,9 @@ User: "Analyze these three charts: Bitcoin, Ethereum, and Nasdaq"
 Analyst:
 1. Confirms receipt of 3 charts
 2. Reads technical_analysis_framework.md
-3. Analyzes Bitcoin chart completely → Generates report → Saves as BTC_technical_analysis_2025-11-02.md
-4. Analyzes Ethereum chart completely → Generates report → Saves as ETH_technical_analysis_2025-11-02.md
-5. Analyzes Nasdaq chart completely → Generates report → Saves as NDX_technical_analysis_2025-11-02.md
+3. Analyzes Bitcoin chart completely → Generates report → Saves as BTC_technical_analysis_[CURRENT_DATE].md
+4. Analyzes Ethereum chart completely → Generates report → Saves as ETH_technical_analysis_[CURRENT_DATE].md
+5. Analyzes Nasdaq chart completely → Generates report → Saves as NDX_technical_analysis_[CURRENT_DATE].md
 6. Notifies user that all three analyses are complete
 ```
 

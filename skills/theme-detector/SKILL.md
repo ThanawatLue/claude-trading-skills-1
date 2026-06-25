@@ -53,7 +53,7 @@ This skill detects and ranks trending market themes by analyzing cross-sector mo
 ## Prerequisites
 
 **Required:**
-- Python 3.7+ with core dependencies:
+- Python >=3.9 with core dependencies:
   ```bash
   pip install requests beautifulsoup4 lxml pandas numpy yfinance
   ```

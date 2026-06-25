@@ -4,6 +4,10 @@ import json
 import os
 import sys
 import unittest
+import unittest.mock
+import urllib.error
+import socket
+
 
 # Add scripts directory to path
 sys.path.insert(
@@ -36,7 +40,184 @@ from fetch_breadth_csv import (
     format_json,
     is_dead_cross,
     uptrend_color,
+    # Fetching functions
+    fetch_csv,
+    fetch_breadth_data,
+    fetch_uptrend_data,
+    fetch_sector_data,
 )
+
+
+class MockResponse:
+    """Helper class to mock urllib.request.urlopen response."""
+
+    def __init__(self, csv_content: str, status: int = 200):
+        self._csv_content = csv_content
+        self.status = status
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        pass
+
+    def read(self):
+        return self._csv_content.encode("utf-8")
+
+    def decode(self, encoding):
+        return self._csv_content
+
+
+class TestFetchData(unittest.TestCase):
+    """Test functions for fetching CSV data with mocked network responses."""
+
+    @unittest.mock.patch("urllib.request.urlopen")
+    def test_fetch_csv_success(self, mock_urlopen):
+        csv_data = "col1,col2\nval1,val2\n"
+        mock_urlopen.return_value = MockResponse(csv_data)
+        result = fetch_csv("http://test.com/data.csv")
+        self.assertEqual(result, [{"col1": "val1", "col2": "val2"}])
+        mock_urlopen.assert_called_once()
+
+    @unittest.mock.patch("urllib.request.urlopen")
+    def test_fetch_csv_network_error(self, mock_urlopen):
+        mock_urlopen.side_effect = urllib.error.URLError("Network unreachable")
+        with self.assertRaises(urllib.error.URLError):
+            fetch_csv("http://test.com/data.csv")
+        mock_urlopen.assert_called_once()
+
+    @unittest.mock.patch("urllib.request.urlopen")
+    def test_fetch_csv_timeout_error(self, mock_urlopen):
+        mock_urlopen.side_effect = socket.timeout("Timed out")
+        with self.assertRaises(socket.timeout):
+            fetch_csv("http://test.com/data.csv")
+        mock_urlopen.assert_called_once()
+
+    @unittest.mock.patch("fetch_breadth_csv.fetch_csv")
+    def test_fetch_breadth_data_success(self, mock_fetch_csv):
+        mock_fetch_csv.return_value = [
+            {
+                "Date": "2026-02-13",
+                "S&P500_Price": "6000.0",
+                "Breadth_Index_Raw": "0.65",
+                "Breadth_200MA": "0.6226",
+                "Breadth_8MA": "0.6756",
+                "Breadth_200MA_Trend": "UPTREND",
+            }
+        ]
+        result = fetch_breadth_data()
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].date, "2026-02-13")
+        self.assertAlmostEqual(result[0].breadth_200ma, 0.6226)
+
+    @unittest.mock.patch("fetch_breadth_csv.fetch_csv")
+    def test_fetch_breadth_data_empty(self, mock_fetch_csv):
+        mock_fetch_csv.return_value = []
+        result = fetch_breadth_data()
+        self.assertEqual(len(result), 0)
+
+    @unittest.mock.patch("fetch_breadth_csv.fetch_csv")
+    def test_fetch_breadth_data_malformed(self, mock_fetch_csv):
+        mock_fetch_csv.return_value = [
+            {
+                "Date": "2026-02-13",
+                "S&P500_Price": "invalid_float",  # Malformed
+                "Breadth_200MA": "0.6226",
+            }
+        ]
+        result = fetch_breadth_data()
+        self.assertEqual(len(result), 1)
+        self.assertIsNone(result[0].sp500_price)  # Should be None due to parsing error
+        self.assertAlmostEqual(result[0].breadth_200ma, 0.6226)
+
+    @unittest.mock.patch("fetch_breadth_csv.fetch_csv")
+    def test_fetch_uptrend_data_success(self, mock_fetch_csv):
+        mock_fetch_csv.return_value = [
+            {
+                "date": "2026-02-13",
+                "worksheet": "all",
+                "ratio": "0.3303",
+                "ma_10": "0.3265",
+                "slope": "0.0055",
+                "trend": "up",
+            }
+        ]
+        result = fetch_uptrend_data(worksheet="all")
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].date, "2026-02-13")
+        self.assertAlmostEqual(result[0].ratio, 0.3303)
+
+    @unittest.mock.patch("fetch_breadth_csv.fetch_csv")
+    def test_fetch_uptrend_data_worksheet_filter(self, mock_fetch_csv):
+        mock_fetch_csv.return_value = [
+            {
+                "date": "2026-02-13",
+                "worksheet": "all",
+                "ratio": "0.3303",
+                "ma_10": "0.3265",
+                "slope": "0.0055",
+                "trend": "up",
+            },
+            {
+                "date": "2026-02-13",
+                "worksheet": "other",
+                "ratio": "0.1",
+                "ma_10": "0.1",
+                "slope": "0.0",
+                "trend": "down",
+            },
+        ]
+        result = fetch_uptrend_data(worksheet="all")
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].date, "2026-02-13")
+        self.assertAlmostEqual(result[0].ratio, 0.3303)
+
+    @unittest.mock.patch("fetch_breadth_csv.fetch_csv")
+    def test_fetch_uptrend_data_malformed(self, mock_fetch_csv):
+        mock_fetch_csv.return_value = [
+            {
+                "date": "2026-02-13",
+                "worksheet": "all",
+                "ratio": "invalid_float",  # Malformed
+                "ma_10": "0.3265",
+                "trend": "up",
+            }
+        ]
+        result = fetch_uptrend_data(worksheet="all")
+        self.assertEqual(len(result), 1)
+        self.assertIsNone(result[0].ratio)
+
+    @unittest.mock.patch("fetch_breadth_csv.fetch_csv")
+    def test_fetch_sector_data_success(self, mock_fetch_csv):
+        mock_fetch_csv.return_value = [
+            {
+                "Sector": "Energy",
+                "Ratio": "0.606",
+                "10MA": "0.55",
+                "Trend": "up",
+                "Slope": "0.01",
+                "Status": "overbought",
+            }
+        ]
+        result = fetch_sector_data()
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].sector, "Energy")
+        self.assertAlmostEqual(result[0].ratio, 0.606)
+
+    @unittest.mock.patch("fetch_breadth_csv.fetch_csv")
+    def test_fetch_sector_data_malformed(self, mock_fetch_csv):
+        mock_fetch_csv.return_value = [
+            {
+                "Sector": "Energy",
+                "Ratio": "invalid_float",  # Malformed
+                "10MA": "0.55",
+                "Trend": "up",
+                "Status": "overbought",
+            }
+        ]
+        result = fetch_sector_data()
+        self.assertEqual(len(result), 1)
+        self.assertIsNone(result[0].ratio)
 
 
 class TestConstants(unittest.TestCase):

@@ -1,6 +1,6 @@
 ---
 name: finviz-screener
-description: Build and open FinViz screener URLs from natural language requests. Use when user wants to screen stocks, find stocks matching criteria, filter by fundamentals or technicals, or asks to open FinViz with specific conditions. Supports both Japanese and English input (e.g., "高配当で成長している小型株を探したい", "Find oversold large caps with high ROE").
+description: Build and open FinViz screener URLs from natural language requests. Use when user wants to screen stocks, find stocks matching criteria, filter by fundamentals or technicals, or asks to open FinViz with specific conditions. Supports English input (e.g., "Find oversold large caps near 52-week lows", "Find stocks with high ROE").
 ---
 
 # FinViz Screener
@@ -10,7 +10,7 @@ description: Build and open FinViz screener URLs from natural language requests.
 Translate natural-language stock screening requests into FinViz screener filter codes, build the URL, and open it in Chrome. No API key required for public screener; FINVIZ Elite is auto-detected from `$FINVIZ_API_KEY` for enhanced functionality.
 
 **Key Features:**
-- Natural language → filter code mapping (Japanese + English)
+- Natural language → filter code mapping (English)
 - URL construction with view type and sort order selection
 - Elite/Public auto-detection (environment variable or explicit flag)
 - Chrome-first browser opening with OS-appropriate fallbacks
@@ -21,13 +21,9 @@ Translate natural-language stock screening requests into FinViz screener filter 
 ## When to Use This Skill
 
 **Explicit Triggers:**
-- "高配当で成長している小型株を探したい"
 - "Find oversold large caps near 52-week lows"
-- "テクノロジーセクターの割安株をスクリーニングしたい"
 - "Screen for stocks with insider buying"
-- "FinVizでブレイクアウト候補を表示して"
 - "Show me high-growth small caps on FinViz"
-- "配当利回り5%以上でROE15%以上の銘柄を探して"
 
 **Implicit Triggers:**
 - User describes stock screening criteria using fundamental or technical terms

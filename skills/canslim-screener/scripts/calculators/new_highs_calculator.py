@@ -104,22 +104,19 @@ def score_newness(distance_from_high_pct: float, breakout_detected: bool) -> int
         Score (0-100)
 
     Scoring Logic:
-    - Within 5% of high + breakout: 100
-    - Within 10% of high + breakout: 80
-    - Within 15% of high OR breakout: 60
+    - Within 5% of high: 100 if breakout_detected else 80
+    - Within 15% of high: 80 if breakout_detected else 60
     - Within 25% of high: 40
     - >25% from high: 20
     """
-    if distance_from_high_pct >= -5 and breakout_detected:
-        return 100  # Perfect setup - at new highs with volume
-    elif distance_from_high_pct >= -10 and breakout_detected:
-        return 80  # Strong momentum
-    elif distance_from_high_pct >= -15 or breakout_detected:
-        return 60  # Acceptable
+    if distance_from_high_pct >= -5:
+        return 100 if breakout_detected else 80
+    elif distance_from_high_pct >= -15:
+        return 80 if breakout_detected else 60
     elif distance_from_high_pct >= -25:
-        return 40  # Weak momentum
+        return 40
     else:
-        return 20  # Too far from highs, lacks sponsorship
+        return 20
 
 
 def interpret_newness_score(score: int, distance: float, breakout: bool) -> str:

@@ -12,7 +12,10 @@ import warnings
 from datetime import datetime
 
 import pandas as pd
+import requests
 import yfinance as yf
+from requests.adapters import HTTPAdapter
+from urllib3.util import Retry
 
 
 _WIKI_SP500_URL = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
@@ -24,14 +27,34 @@ _WIKI_HEADERS = {
     )
 }
 
+_SESSION = None
+
+
+def _get_session() -> requests.Session:
+    """Get or create a requests Session with robust retry logic."""
+    global _SESSION
+    if _SESSION is None:
+        session = requests.Session()
+        retries = Retry(
+            total=5,
+            backoff_factor=1,
+            status_forcelist=[429, 500, 502, 503, 504],
+            raise_on_status=False,
+        )
+        adapter = HTTPAdapter(max_retries=retries)
+        session.mount("http://", adapter)
+        session.mount("https://", adapter)
+        _SESSION = session
+    return _SESSION
+
 
 def _fetch_wiki_tables() -> list:
     """Fetch Wikipedia S&P 500 table, bypassing 403 with browser User-Agent."""
-    import requests as _requests
     from io import StringIO
 
     try:
-        resp = _requests.get(_WIKI_SP500_URL, headers=_WIKI_HEADERS, timeout=20)
+        session = _get_session()
+        resp = session.get(_WIKI_SP500_URL, headers=_WIKI_HEADERS, timeout=20)
         resp.raise_for_status()
         return pd.read_html(StringIO(resp.text))
     except Exception as e:
@@ -39,7 +62,7 @@ def _fetch_wiki_tables() -> list:
         return []
 
 
-def fetch_sp500_list(sector: str | None = None) -> list[dict]:
+def fetch_sp500_list(sector: str | None = None, limit: int | None = None) -> list[dict]:
     """Return S&P 500 stocks with symbol, sector, and marketCap.
 
     Pulls the constituent table from Wikipedia, then fetches market cap
@@ -68,15 +91,20 @@ def fetch_sp500_list(sector: str | None = None) -> list[dict]:
 
         records.append({"symbol": sym, "sector": sec, "marketCap": None})
 
+    if limit is not None:
+        records = records[:limit]
+
     # Fetch market caps in batch using yfinance fast_info
     for rec in records:
         try:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
-                info = yf.Ticker(rec["symbol"]).fast_info
+                ticker = yf.Ticker(rec["symbol"])
+                info = ticker.fast_info
                 rec["marketCap"] = getattr(info, "market_cap", None)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Warning: failed to fetch market cap for {rec['symbol']}: {e}")
+            rec["marketCap"] = None
 
     return records
 
@@ -99,7 +127,7 @@ def fetch_historical_prices(
                 auto_adjust=True,
                 progress=False,
             )
-        if raw.empty:
+        if raw is None or not isinstance(raw, pd.DataFrame) or raw.empty:
             return pd.DataFrame()
 
         # yfinance returns MultiIndex columns when downloading a single ticker
@@ -111,8 +139,19 @@ def fetch_historical_prices(
 
         raw = raw.reset_index()
         raw.rename(columns={"index": "date", "Date": "date"}, inplace=True)
+        
+        if "date" not in raw.columns:
+            return pd.DataFrame()
+
         raw["date"] = pd.to_datetime(raw["date"])
         raw = raw.sort_values("date").reset_index(drop=True)
+
+        # Drop rows where critical columns are NaN
+        critical_cols = [c for c in ["date", "close"] if c in raw.columns]
+        raw = raw.dropna(subset=critical_cols)
+
+        if raw.empty:
+            return pd.DataFrame()
 
         keep = [c for c in ["date", "open", "high", "low", "close", "volume"] if c in raw.columns]
         return raw[keep]

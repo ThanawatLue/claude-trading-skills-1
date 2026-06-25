@@ -13,27 +13,31 @@ description: Evaluates market bubble risk through quantitative data-driven analy
 3. ✅ **Two-Phase Evaluation Process** - Quantitative evaluation → Qualitative adjustment (strict order)
 4. ✅ **Stricter Qualitative Criteria** - Max +3 points (reduced from +5), requires measurable evidence
 5. ✅ **Confirmation Bias Prevention** - Explicit checklist to avoid over-scoring
-6. ✅ **Granular Risk Phases** - Added "Elevated Risk" phase (8-9 points) for nuanced risk management
+
 
 ---
 
 ## When to Use This Skill
 
 Use this skill when:
-
-**English:**
 - User asks "Is the market in a bubble?" or "Are we in a bubble?"
 - User seeks advice on profit-taking, new entry timing, or short-selling decisions
 - User reports social phenomena (non-investors entering, media frenzy, IPO flood)
 - User mentions narratives like "this time is different" or "revolutionary technology" becoming mainstream
 - User consults about risk management for existing positions
 
-**Japanese:**
-- ユーザーが「今の相場はバブルか?」と尋ねる
-- 投資の利確・新規参入・空売りのタイミング判断を求める
-- 社会現象(非投資家の参入、メディア過熱、IPO氾濫)を観察し懸念を表明
-- 「今回は違う」「革命的技術」などの物語が主流化している状況を報告
-- 保有ポジションのリスク管理方法を相談
+---
+
+## Prerequisites
+
+This skill requires a working Python environment with `uv` (a fast Python package installer and resolver) and access to the internet for data retrieval. Ensure the following are installed and configured:
+
+- **Python 3.8+**: Ensure Python is installed and available in your PATH.
+- **uv**: Install `uv` globally or in your project's virtual environment:
+  ```bash
+  pip install uv
+  ```
+- **Internet Access**: Required to fetch real-time market data from sources like CBOE DataShop, Yahoo Finance, FINRA, Renaissance Capital IPO, etc.
 
 ---
 
@@ -82,67 +86,7 @@ Use this skill when:
 
 ### Phase 2: Quantitative Evaluation (Quantitative Scoring)
 
-Score mechanically based on collected data using the following criteria:
-
-#### Indicator 1: Put/Call Ratio (Market Sentiment)
-```
-Scoring Criteria:
-- 2 points: P/C < 0.70 (excessive optimism, call-heavy)
-- 1 point: P/C 0.70-0.85 (slightly optimistic)
-- 0 points: P/C > 0.85 (healthy caution)
-
-Rationale: P/C < 0.7 is historically characteristic of bubble periods
-```
-
-#### Indicator 2: Volatility Suppression + New Highs
-```
-Scoring Criteria:
-- 2 points: VIX < 12 AND major index within 5% of 52-week high
-- 1 point: VIX 12-15 AND near highs
-- 0 points: VIX > 15 OR more than 10% from highs
-
-Rationale: Extreme low volatility + highs indicates excessive complacency
-```
-
-#### Indicator 3: Leverage (Margin Debt Balance)
-```
-Scoring Criteria:
-- 2 points: YoY +20% or more AND all-time high
-- 1 point: YoY +10-20%
-- 0 points: YoY +10% or less OR negative
-
-Rationale: Rapid leverage increase is a bubble precursor
-```
-
-#### Indicator 4: IPO Market Overheating
-```
-Scoring Criteria:
-- 2 points: Quarterly IPO count > 2x 5-year average AND median first-day return +20%+
-- 1 point: Quarterly IPO count > 1.5x 5-year average
-- 0 points: Normal levels
-
-Rationale: Poor-quality IPO flood is characteristic of late-stage bubbles
-```
-
-#### Indicator 5: Breadth Anomaly (Narrow Leadership)
-```
-Scoring Criteria:
-- 2 points: New high AND < 45% of stocks above 50DMA (narrow leadership)
-- 1 point: 45-60% above 50DMA (somewhat narrow)
-- 0 points: > 60% above 50DMA (healthy breadth)
-
-Rationale: Rally driven by few stocks is fragile
-```
-
-#### Indicator 6: Price Acceleration
-```
-Scoring Criteria:
-- 2 points: Past 3-month return exceeds 95th percentile of past 10 years
-- 1 point: Past 3-month return in 85-95th percentile of past 10 years
-- 0 points: Below 85th percentile
-
-Rationale: Rapid price acceleration is unsustainable
-```
+Score mechanically based on collected data using 8 quantitative indicators. Each indicator is scored from 0-2 points, leading to a maximum of 16 points for this phase. Refer to the `quick_reference.md` for detailed scoring criteria for each indicator.
 
 ---
 
@@ -233,22 +177,15 @@ Bloomberg: 'Traditional metrics obsolete' (Nov 2025)."
 ### Phase 4: Final Judgment (REVISED v2.1)
 
 ```
-Final Score = Phase 2 Total (0-12 points) + Phase 3 Adjustment (0 to +3 points)
-Range: 0 to 15 points
+Final Score = Phase 2 Total (0-16 points) + Phase 3 Adjustment (0 to +3 points)
+Range: 0 to 19 points
 
 Judgment Criteria (with Risk Budget):
 - 0-4 points: Normal (Risk Budget: 100%)
-- 5-7 points: Caution (Risk Budget: 70-80%)
-- 8-9 points: Elevated Risk (Risk Budget: 50-70%) ⚠️ NEW in v2.1
-- 10-12 points: Euphoria (Risk Budget: 40-50%)
-- 13-15 points: Critical (Risk Budget: 20-30%)
+- 5-8 points: Caution (Risk Budget: 70-80%)
+- 9-12 points: Euphoria (Risk Budget: 40-50%)
+- 13-19 points: Critical (Risk Budget: 20-30%)
 ```
-
-**Key Change in v2.1:**
-- Added "Elevated Risk" phase (8-9 points) for more nuanced positioning
-- 9 points is no longer extreme defensive zone (was 40% risk budget)
-- Now allows 50-70% risk budget at 8-9 point level
-- More gradual transition from Caution to Euphoria phases
 
 ---
 
@@ -272,15 +209,7 @@ Judgment Criteria (with Risk Budget):
 
 ## Implementation Checklist
 
-Verify the following when using:
-
-```
-□ Have you collected all Phase 1 data?
-□ Did you apply each indicator's threshold mechanically?
-□ Did you keep qualitative evaluation within +5 point limit?
-□ Are you NOT assigning points based on news article impressions?
-□ Does your final score align with other quantitative frameworks?
-```
+For a detailed implementation checklist and best practices, please refer to `references/implementation_guide.md` and `references/quick_reference.md`.
 
 ---
 
@@ -320,81 +249,15 @@ Do not readily acknowledge mass penetration without direct recommendations from 
 
 ---
 
-## Recommended Actions by Bubble Stage (REVISED v2.1)
+## Recommended Actions by Bubble Stage
 
-### Normal (0-4 points)
-**Risk Budget: 100%**
-- Continue normal investment strategy
-- Set ATR 2.0× trailing stop
-- Apply stair-step profit-taking rule (+20% take 25%)
-
-**Short-Selling: Not Allowed**
-- Composite conditions not met (0/7 items)
-
-### Caution (5-7 points)
-**Risk Budget: 70-80%**
-- Begin partial profit-taking (20-30% reduction)
-- Tighten ATR to 1.8×
-- Reduce new position sizing by 50%
-
-**Short-Selling: Not Recommended**
-- Wait for clearer reversal signals
-
-### Elevated Risk (8-9 points) ⚠️ NEW in v2.1
-**Risk Budget: 50-70%**
-- Increase profit-taking (30-50% reduction)
-- Tighten ATR to 1.6×
-- New positions: highly selective, quality only
-- Begin building cash reserves for future opportunities
-
-**Short-Selling: Consider Cautiously**
-- Only after confirming at least 2/7 composite conditions
-- Small exploratory positions (10-15% of normal size)
-- Strict stop-loss (ATR 2.0×)
-
-**Rationale for NEW phase:**
-This zone represents heightened caution without extreme defensiveness.
-Market shows warning signs but not imminent collapse.
-Maintain exposure to quality positions while building flexibility.
-
-### Euphoria (10-12 points)
-**Risk Budget: 40-50%**
-- Accelerate stair-step profit-taking (50-60% reduction)
-- Tighten ATR to 1.5×
-- No new long positions except on major pullbacks
-
-**Short-Selling: Active Consideration**
-- After confirming at least 3/7 composite conditions
-- Small positions (20-25% of normal size)
-- Defined risk only (options, tight stops)
-
-### Critical (13-15 points)
-**Risk Budget: 20-30%**
-- Major profit-taking or full hedge implementation
-- ATR 1.2× or fixed stop-loss
-- Cash preservation mode - prepare for major dislocation
-
-**Short-Selling: Recommended**
-- After confirming at least 5/7 composite conditions
-- Scale in with small positions, pyramid on confirmation
-- Tight stop-loss (ATR 1.5× or higher)
-- Consider put options for defined risk
+For detailed recommended actions, risk budgets, and short-selling guidelines for each bubble stage, please refer to the "Action Matrix by Bubble Stage" in `quick_reference.md`.
 
 ---
 
-## Composite Conditions for Short-Selling (7 Items)
+## Composite Conditions for Short-Selling
 
-Only consider shorts after confirming at least 3 of the following:
-
-```
-1. Weekly chart shows lower highs
-2. Volume peaks out
-3. Leverage indicators drop sharply (margin debt decline)
-4. Media/search trends peak out
-5. Weak stocks start to break down first
-6. VIX surges (spike above 20)
-7. Fed/policy shift signals
-```
+For detailed composite conditions for short-selling, please refer to `quick_reference.md`.
 
 ---
 
@@ -406,23 +269,25 @@ Only consider shorts after confirming at least 3 of the following:
 # [Market Name] Bubble Evaluation Report (Revised v2.1)
 
 ## Overall Assessment
-- Final Score: X/15 points (v2.1: max reduced from 16)
-- Phase: [Normal/Caution/Elevated Risk/Euphoria/Critical]
-- Risk Level: [Low/Medium/Medium-High/High/Extremely High]
+- Final Score: X/19 points
+- Phase: [Normal/Caution/Euphoria/Critical]
+- Risk Level: [Low/Medium/High/Extremely High]
 - Evaluation Date: YYYY-MM-DD
 
 ## Quantitative Evaluation (Phase 2)
 
-| Indicator | Measured Value | Score | Rationale |
-|-----------|----------------|-------|-----------|
-| Put/Call | [value] | [0-2] | [reason] |
-| VIX + Highs | [value] | [0-2] | [reason] |
-| Margin YoY | [value] | [0-2] | [reason] |
-| IPO Heat | [value] | [0-2] | [reason] |
-| Breadth | [value] | [0-2] | [reason] |
-| Price Accel | [value] | [0-2] | [reason] |
+| Indicator           | Measured Value | Score | Rationale |
+|---------------------|----------------|-------|-----------|
+| Mass Penetration    | [value]        | [0-2] | [reason]  |
+| Media Saturation    | [value]        | [0-2] | [reason]  |
+| New Entrants        | [value]        | [0-2] | [reason]  |
+| Issuance Flood      | [value]        | [0-2] | [reason]  |
+| Leverage            | [value]        | [0-2] | [reason]  |
+| Price Acceleration  | [value]        | [0-2] | [reason]  |
+| Valuation Disconnect| [value]        | [0-2] | [reason]  |
+| Correlation & Breadth| [value]       | [0-2] | [reason]  |
 
-**Phase 2 Total: X/12 points**
+**Phase 2 Total: X/16 points**
 
 ## Qualitative Adjustment (Phase 3) - STRICT CRITERIA
 
@@ -453,7 +318,7 @@ Only consider shorts after confirming at least 3 of the following:
 
 ## Recommended Actions
 
-**Risk Budget: X%** (Phase: [Normal/Caution/Elevated Risk/Euphoria/Critical])
+**Risk Budget: X%** (Phase: [Normal/Caution/Euphoria/Critical])
 - [Specific action 1]
 - [Specific action 2]
 - [Specific action 3]
@@ -471,6 +336,38 @@ Only consider shorts after confirming at least 3 of the following:
 
 ---
 
+## Runnable Examples
+
+To run the US Market Bubble Detector skill, you typically invoke it through a Python script that orchestrates the data collection and evaluation process.
+
+**Example 1: Run the bubble detection for the US market in manual assessment mode**
+
+```bash
+# Navigate to the project root directory
+cd D:\\ex_work\\trading
+
+# Ensure dependencies are installed (if not already)
+uv pip install -e .
+
+# Execute the skill (run in manual mode for interactive scoring, outputting as text)
+python -m skills.us_market-bubble-detector.scripts.bubble_scorer --manual --output text
+```
+
+**Example 2: Run the bubble detection by providing scores directly (non-interactive)**
+
+```bash
+# Navigate to the project root directory
+cd D:\\ex_work\\trading
+
+# Ensure dependencies are installed (if not already)
+uv pip install -e .
+
+# Execute the skill with predefined scores (outputting as JSON)
+python -m skills.us_market-bubble-detector.scripts.bubble_scorer --scores '{"mass_penetration":2,"media_saturation":1,"new_accounts":2,"new_issuance":1,"leverage":1,"price_acceleration":2,"valuation_disconnect":2,"breadth_expansion":1}' --output json
+```
+
+---
+
 ## Reference Documents
 
 ### `references/implementation_guide.md` (English) - **RECOMMENDED FOR FIRST USE**
@@ -480,18 +377,17 @@ Only consider shorts after confirming at least 3 of the following:
 - Red flags during review
 - Best practices for objective evaluation
 
-### `references/bubble_framework.md` (Japanese)
+### `references/bubble_framework.md` (English)
 - Detailed theoretical framework
 - Explanation of Minsky/Kindleberger model
 - Behavioral psychology elements
 
-### `references/historical_cases.md` (Japanese)
+### `references/historical_cases.md` (English)
 - Analysis of past bubble cases
 - Dotcom, Crypto, Pandemic bubbles
 - Common pattern extraction
 
-### `references/quick_reference.md` (Japanese)
-### `references/quick_reference_en.md` (English)
+### `references/quick_reference.md` (English)
 - Daily checklist
 - Emergency 3-question assessment
 - Quick scoring guide
@@ -501,7 +397,7 @@ Only consider shorts after confirming at least 3 of the following:
 - **First use or need detailed guidance:** Load `implementation_guide.md`
 - **Need theoretical background:** Load `bubble_framework.md`
 - **Need historical context:** Load `historical_cases.md`
-- **Daily operations:** Load `quick_reference.md` (Japanese) or `quick_reference_en.md` (English)
+- **Daily operations:** Load `quick_reference.md` (English)
 
 ---
 
@@ -519,12 +415,10 @@ Only consider shorts after confirming at least 3 of the following:
 - "P/E 30.8 but AI has fundamental backing" → 0 points (fundamentals support)
 - **Result: 9/15 points - balanced, data-driven assessment**
 
-**Key Improvements:**
+Key Improvements:
 1. **Confirmation Bias Prevention**: Explicit checklist before adding qualitative points
 2. **Measurable Evidence Required**: No points without concrete data (Google Trends, media coverage)
 3. **Double-Counting Prevention**: Valuation must not duplicate Phase 2 quantitative
-4. **Granular Risk Phases**: Added "Elevated Risk" (8-9 points) for nuanced positioning
-5. **Balanced Risk Budgets**: 9 points = 50-70% (not 40% extreme defensive)
 
 **Core Principle:**
 > "In God we trust; all others must bring data." - W. Edwards Deming

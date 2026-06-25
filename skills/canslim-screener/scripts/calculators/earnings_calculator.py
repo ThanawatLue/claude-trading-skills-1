@@ -16,6 +16,46 @@ Scoring:
 """
 
 
+def find_year_ago_quarter_index(income_statements: list[dict], base_index: int) -> int:
+    """Find index of the quarter closest to 365 days before the base_index quarter.
+    Falls back to base_index + 4 if no matches found or errors occur.
+    """
+    from datetime import datetime, timedelta
+    
+    if base_index >= len(income_statements):
+        return base_index + 4
+        
+    base_date_str = income_statements[base_index].get("date")
+    if not base_date_str:
+        return base_index + 4
+        
+    try:
+        base_date = datetime.strptime(base_date_str[:10], "%Y-%m-%d")
+    except ValueError:
+        return base_index + 4
+        
+    target_date = base_date - timedelta(days=365)
+    best_index = base_index + 4
+    best_diff = float("inf")
+    
+    for i in range(base_index + 1, len(income_statements)):
+        date_str = income_statements[i].get("date")
+        if not date_str:
+            continue
+        try:
+            date_val = datetime.strptime(date_str[:10], "%Y-%m-%d")
+        except ValueError:
+            continue
+            
+        diff = abs((base_date - date_val).days - 365)
+        # We want it to be reasonably close to 365 days, e.g. within 60 days
+        if diff < 60 and diff < best_diff:
+            best_diff = diff
+            best_index = i
+            
+    return best_index
+
+
 def calculate_quarterly_growth(income_statements: list[dict]) -> dict:
     """
     Calculate quarterly EPS and revenue growth (year-over-year)
@@ -55,9 +95,22 @@ def calculate_quarterly_growth(income_statements: list[dict]) -> dict:
             "interpretation": "Data unavailable",
         }
 
-    # Extract most recent quarter (index 0) and year-ago quarter (index 4)
+    # Extract most recent quarter (index 0) and year-ago quarter (dynamic search)
     latest = income_statements[0]
-    year_ago = income_statements[4]
+    year_ago_idx = find_year_ago_quarter_index(income_statements, 0)
+    if year_ago_idx is None or year_ago_idx >= len(income_statements):
+        return {
+            "score": 0,
+            "error": "Insufficient quarterly data (cannot find year-ago quarter)",
+            "latest_qtr_eps_growth": None,
+            "latest_qtr_revenue_growth": None,
+            "latest_eps": None,
+            "year_ago_eps": None,
+            "latest_revenue": None,
+            "year_ago_revenue": None,
+            "interpretation": "Data unavailable",
+        }
+    year_ago = income_statements[year_ago_idx]
 
     # Extract EPS (try multiple field names for compatibility)
     latest_eps = latest.get("eps") or latest.get("epsdiluted") or latest.get("netIncomePerShare")
@@ -102,27 +155,43 @@ def calculate_quarterly_growth(income_statements: list[dict]) -> dict:
         # Handle zero/negative EPS edge case
         if latest_eps > 0 and year_ago_eps <= 0:
             # Turnaround situation (negative to positive)
-            eps_growth = 999.9  # Cap at very high growth
+            eps_growth = 500.0  # Cap at high growth
         else:
             eps_growth = 0
     else:
         eps_growth = ((latest_eps - year_ago_eps) / abs(year_ago_eps)) * 100
+        if eps_growth > 500.0:
+            eps_growth = 500.0  # Cap EPS growth outlier at 500%
 
     revenue_growth = ((latest_revenue - year_ago_revenue) / year_ago_revenue) * 100
 
-    # Calculate score
+    # Detect earnings acceleration trend
+    accel_data = detect_earnings_acceleration(income_statements)
+    accel_trend = accel_data.get("trend", "stable")
+
+    # Calculate base score using additive model
     score = score_current_earnings(eps_growth, revenue_growth)
 
-    # Generate interpretation
+    # Apply acceleration bonus (+10) or penalty (-10)
+    if accel_trend == "accelerating":
+        score = min(score + 10, 100)
+    elif accel_trend == "decelerating":
+        score = max(score - 10, 0)
+
+    # Generate base interpretation
     interpretation = interpret_earnings_score(score, eps_growth, revenue_growth)
+    if accel_data.get("interpretation"):
+        interpretation += f" | {accel_data['interpretation']}"
 
     # Quality check: flag if revenue growth significantly lags EPS growth
     quality_warning = None
     if revenue_growth < (eps_growth * 0.5) and eps_growth > 20:
-        quality_warning = (
-            "Revenue growth significantly lags EPS growth - "
-            "investigate earnings quality (potential buyback-driven)"
-        )
+        # If it's a massive turnaround (EPS > 100%), relax the warning since revenue lagging is normal initially
+        if eps_growth < 100.0:
+            quality_warning = (
+                "Revenue growth significantly lags EPS growth - "
+                "investigate earnings quality (potential buyback-driven)"
+            )
 
     return {
         "score": score,
@@ -137,45 +206,52 @@ def calculate_quarterly_growth(income_statements: list[dict]) -> dict:
         "interpretation": interpretation,
         "quality_warning": quality_warning,
         "error": None,
+        "acceleration_trend": accel_trend,
+        "acceleration_details": accel_data.get("interpretation", ""),
     }
 
 
 def score_current_earnings(eps_growth: float, revenue_growth: float) -> int:
     """
-    Score C component based on quarterly EPS and revenue growth
+    Score C component based on quarterly EPS and revenue growth (Additive Model)
 
     Args:
-        eps_growth: Year-over-year EPS growth percentage
+        eps_growth: Year-over-year EPS growth percentage (capped)
         revenue_growth: Year-over-year revenue growth percentage
 
     Returns:
         Score (0-100)
-
-    Scoring Logic (from scoring_system.md):
-    - 100: EPS >=50% AND Revenue >=25%  (explosive)
-    - 80:  EPS 30-49% AND Revenue >=15% (strong)
-    - 60:  EPS 18-29% AND Revenue >=10% (meets CANSLIM minimum)
-    - 40:  EPS 10-17%                   (below threshold)
-    - 0:   EPS <10%                     (weak/negative)
     """
-    # Exceptional growth
-    if eps_growth >= 50 and revenue_growth >= 25:
-        return 100
+    # 1. Base score from EPS growth
+    if eps_growth >= 50:
+        base_score = 75
+    elif eps_growth >= 30:
+        base_score = 60
+    elif eps_growth >= 18:
+        base_score = 50
+    elif eps_growth >= 10:
+        base_score = 30
+    else:
+        base_score = 0
 
-    # Strong growth
-    if eps_growth >= 30 and revenue_growth >= 15:
-        return 80
+    # If EPS growth is negative or very weak, do not grant revenue bonus
+    if base_score == 0:
+        return 0
 
-    # Meets CANSLIM minimum (18%+ EPS growth)
-    if eps_growth >= 18 and revenue_growth >= 10:
-        return 60
+    # 2. Additive bonus from Revenue growth
+    if revenue_growth >= 25:
+        bonus = 25
+    elif revenue_growth >= 15:
+        bonus = 20
+    elif revenue_growth >= 10:
+        bonus = 10
+    elif revenue_growth >= 5:
+        bonus = 5
+    else:
+        bonus = 0
 
-    # Below threshold but positive
-    if eps_growth >= 10:
-        return 40
-
-    # Weak or negative growth
-    return 0
+    score = base_score + bonus
+    return min(score, 100)
 
 
 def interpret_earnings_score(score: int, eps_growth: float, revenue_growth: float) -> str:
@@ -247,23 +323,54 @@ def detect_earnings_acceleration(income_statements: list[dict]) -> dict:
             "interpretation": "Insufficient data for trend analysis",
         }
 
+    # Helper to extract EPS safely
+    def _get_eps(stmt):
+        if not stmt:
+            return 0.0
+        val = stmt.get("eps")
+        if val is None:
+            val = stmt.get("epsdiluted")
+        if val is None:
+            val = stmt.get("netIncomePerShare")
+        return float(val) if val is not None else 0.0
+
     # Most recent quarter vs year-ago
-    recent_eps = income_statements[0].get("eps", 0)
-    recent_year_ago_eps = income_statements[4].get("eps", 0.01)
-    recent_growth = (
-        ((recent_eps - recent_year_ago_eps) / abs(recent_year_ago_eps)) * 100
-        if recent_year_ago_eps
-        else 0
-    )
+    recent_eps = _get_eps(income_statements[0])
+    recent_year_ago_idx = find_year_ago_quarter_index(income_statements, 0)
+    if recent_year_ago_idx is None or recent_year_ago_idx >= len(income_statements):
+        return {
+            "trend": "unknown",
+            "recent_growth": None,
+            "prior_growth": None,
+            "interpretation": "Insufficient data for trend analysis",
+        }
+    recent_year_ago_eps = _get_eps(income_statements[recent_year_ago_idx])
+    
+    if recent_year_ago_eps == 0:
+        recent_growth = 500.0 if recent_eps > 0 else 0.0
+    else:
+        recent_growth = ((recent_eps - recent_year_ago_eps) / abs(recent_year_ago_eps)) * 100
+        if recent_growth > 500.0:
+            recent_growth = 500.0
 
     # Prior quarter vs its year-ago
-    prior_eps = income_statements[1].get("eps", 0)
-    prior_year_ago_eps = income_statements[5].get("eps", 0.01)
-    prior_growth = (
-        ((prior_eps - prior_year_ago_eps) / abs(prior_year_ago_eps)) * 100
-        if prior_year_ago_eps
-        else 0
-    )
+    prior_eps = _get_eps(income_statements[1])
+    prior_year_ago_idx = find_year_ago_quarter_index(income_statements, 1)
+    if prior_year_ago_idx is None or prior_year_ago_idx >= len(income_statements):
+        return {
+            "trend": "unknown",
+            "recent_growth": None,
+            "prior_growth": None,
+            "interpretation": "Insufficient data for trend analysis",
+        }
+    prior_year_ago_eps = _get_eps(income_statements[prior_year_ago_idx])
+    
+    if prior_year_ago_eps == 0:
+        prior_growth = 500.0 if prior_eps > 0 else 0.0
+    else:
+        prior_growth = ((prior_eps - prior_year_ago_eps) / abs(prior_year_ago_eps)) * 100
+        if prior_growth > 500.0:
+            prior_growth = 500.0
 
     # Determine trend
     if recent_growth > prior_growth + 5:  # 5% threshold for significance

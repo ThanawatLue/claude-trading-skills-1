@@ -281,7 +281,8 @@ class FMPClient:
         if cache_key in self.cache:
             return self.cache[cache_key]
 
-        url = f"{self.BASE_URL}/earning_calendar"
+        # Use stable/earnings-calendar to avoid legacy endpoint 403 errors
+        url = "https://financialmodelingprep.com/stable/earnings-calendar"
         params = {"from": from_date, "to": to_date}
         data = self._rate_limited_get(url, params)
         if data:

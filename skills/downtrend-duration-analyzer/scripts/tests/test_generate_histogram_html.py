@@ -9,7 +9,16 @@ from generate_histogram_html import (
     find_latest_json,
     generate_html,
     generate_sector_options,
+    main # Import main for integration tests
 )
+import pandas as pd
+import numpy as np
+import unittest
+from unittest.mock import patch
+import sys
+from io import StringIO
+from pathlib import Path
+import json
 
 
 class TestGenerateSectorOptions:
@@ -186,3 +195,77 @@ class TestFindLatestJson:
         result = find_latest_json(str(tmp_path / "nonexistent.json"), tmp_path)
 
         assert result is None
+
+
+class TestMainIntegration(unittest.TestCase):
+    @patch("generate_histogram_html.find_latest_json")
+    @patch("builtins.open", new_callable=unittest.mock.mock_open)
+    @patch("json.load")
+    @patch("pathlib.Path.mkdir")
+    @patch("pathlib.Path.exists", return_value=True) # Mock exists for the input directory
+    @patch("pathlib.Path.write_text")
+    def test_main_function_execution(
+        self,
+        mock_write_text,
+        mock_exists,
+        mock_mkdir,
+        mock_json_load,
+        mock_open,
+        mock_find_latest_json,
+    ):
+        # Mock find_latest_json to return a dummy path
+        mock_json_file_path = Path("/mock/path/downtrend_analysis_latest.json")
+        mock_find_latest_json.return_value = mock_json_file_path
+
+        # Mock json.load to return a sample analysis result
+        sample_analysis_data = {
+            "schema_version": "1.0",
+            "analysis_date": "2026-03-28T07:00:00Z",
+            "parameters": {},
+            "summary": {
+                "total_downtrends": 50,
+                "median_duration_days": 20,
+            },
+            "downtrends": [
+                {"sector": "Technology", "market_cap_tier": "Mega", "duration_days": 25},
+                {"sector": "Healthcare", "market_cap_tier": "Large", "duration_days": 15},
+            ],
+            "by_market_cap": {},
+            "by_sector": {},
+        }
+        mock_json_load.return_value = sample_analysis_data
+
+        # Redirect stdout to capture print statements
+        old_stdout = sys.stdout
+        sys.stdout = new_stdout = StringIO()
+
+        try:
+            # Simulate command-line arguments
+            test_args = [
+                "generate_histogram_html.py",
+                "--input", "/mock/path/downtrend_analysis_*.json",
+                "--output-dir", "test_reports"
+            ]
+            with patch.object(sys, 'argv', test_args):
+                main()
+
+            # Assertions
+            mock_find_latest_json.assert_called_once()
+            mock_json_load.assert_called_once()
+            mock_write_text.assert_called_once()
+
+            # Get the content written via write_text
+            written_content = mock_write_text.call_args[0][0]
+
+            self.assertIn("<title>Downtrend Duration Analysis</title>", written_content)
+            self.assertIn("Total Downtrends: 50", written_content)
+            self.assertIn("Median (days)", written_content)
+            self.assertIn("Technology", written_content)
+            self.assertIn("Healthcare", written_content)
+
+            # Check if print statements indicate completion
+            output = new_stdout.getvalue()
+            self.assertIn("HTML visualization saved to:", output)
+
+        finally:
+            sys.stdout = old_stdout # Restore stdout

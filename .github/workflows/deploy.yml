@@ -1,0 +1,31 @@
+name: Deploy to GCP VM
+
+on:
+  push:
+    branches:
+      - main
+  # Allow manual trigger
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Execute deployment commands via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GCP_HOST }}
+          username: ${{ secrets.GCP_USERNAME }}
+          key: ${{ secrets.GCP_SSH_KEY }}
+          script: |
+            # Navigate to project directory
+            cd ~/tong_trading
+            
+            # Pull latest changes from GitHub
+            git pull origin main
+            
+            # Update dependencies using uv
+            uv sync
+            
+            # Restart the Flask Dashboard service
+            sudo systemctl restart dashboard.service

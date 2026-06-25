@@ -20,7 +20,7 @@ from typing import Optional
 
 
 def calculate_market_direction(
-    sp500_quote: dict, sp500_prices: Optional[list[dict]] = None, vix_quote: Optional[dict] = None
+    sp500_quote: dict, sp500_prices: Optional[list[dict]] = None, vix_quote: Optional[dict] = None, index_name: str = "S&P 500"
 ) -> dict:
     """
     Calculate M component score based on S&P 500 trend and VIX
@@ -95,7 +95,7 @@ def calculate_market_direction(
     score = score_market_direction(trend, vix_level)
 
     # Generate interpretation
-    interpretation = interpret_market_score(score, trend, distance_from_ema_pct, vix_level)
+    interpretation = interpret_market_score(score, trend, distance_from_ema_pct, vix_level, index_name=index_name)
 
     # Warning for bear market
     warning = None
@@ -182,7 +182,7 @@ def score_market_direction(trend: str, vix_level: Optional[float]) -> int:
     return min(max(base_score, 0), 100)
 
 
-def interpret_market_score(score: int, trend: str, distance: float, vix: Optional[float]) -> str:
+def interpret_market_score(score: int, trend: str, distance: float, vix: Optional[float], index_name: str = "S&P 500") -> str:
     """
     Generate human-readable market interpretation
 
@@ -191,6 +191,7 @@ def interpret_market_score(score: int, trend: str, distance: float, vix: Optiona
         trend: Trend classification
         distance: Distance from 50-EMA (%)
         vix: VIX level
+        index_name: Name of the benchmark index (default "S&P 500")
 
     Returns:
         Interpretation string
@@ -198,17 +199,17 @@ def interpret_market_score(score: int, trend: str, distance: float, vix: Optiona
     vix_text = f", VIX {vix:.1f}" if vix else ""
 
     if score >= 90:
-        return f"Strong bull market - Aggressive buying recommended (S&P 500 {distance:+.1f}% from 50-EMA{vix_text})"
+        return f"Strong bull market - Aggressive buying recommended ({index_name} {distance:+.1f}% from 50-EMA{vix_text})"
     elif score >= 70:
-        return f"Bull market - Standard position sizing (S&P 500 {distance:+.1f}% from 50-EMA{vix_text})"
+        return f"Bull market - Standard position sizing ({index_name} {distance:+.1f}% from 50-EMA{vix_text})"
     elif score >= 50:
-        return f"Early uptrend - Small initial positions (S&P 500 {distance:+.1f}% from 50-EMA{vix_text})"
+        return f"Early uptrend - Small initial positions ({index_name} {distance:+.1f}% from 50-EMA{vix_text})"
     elif score >= 30:
-        return f"Choppy/neutral - Reduce exposure, be selective (S&P 500 {distance:+.1f}% from 50-EMA{vix_text})"
+        return f"Choppy/neutral - Reduce exposure, be selective ({index_name} {distance:+.1f}% from 50-EMA{vix_text})"
     elif score >= 10:
-        return f"Downtrend forming - Defensive posture (S&P 500 {distance:+.1f}% from 50-EMA{vix_text})"
+        return f"Downtrend forming - Defensive posture ({index_name} {distance:+.1f}% from 50-EMA{vix_text})"
     else:
-        return f"Bear market - Raise 80-100% cash, DO NOT BUY (S&P 500 {distance:+.1f}% from 50-EMA{vix_text})"
+        return f"Bear market - Raise 80-100% cash, DO NOT BUY ({index_name} {distance:+.1f}% from 50-EMA{vix_text})"
 
 
 # Example usage

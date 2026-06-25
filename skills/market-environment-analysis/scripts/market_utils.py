@@ -5,7 +5,8 @@ Market Analysis Utility Functions for Environment Report
 This script provides common functions for market analysis report creation.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
+from zoneinfo import ZoneInfo
 
 
 def get_market_session_times():
@@ -72,27 +73,39 @@ def categorize_volatility(vix_value):
         return "Extreme Volatility 🚨"
 
 
+MARKET_TIMEZONES = {
+    "Tokyo": {"tz": "Asia/Tokyo", "open": time(9, 0), "close": time(15, 0)},
+    "New York": {"tz": "America/New_York", "open": time(9, 30), "close": time(16, 0)},
+    "London": {"tz": "Europe/London", "open": time(8, 0), "close": time(16, 30)},
+    "Shanghai": {"tz": "Asia/Shanghai", "open": time(9, 30), "close": time(15, 0)},
+    "Hong Kong": {"tz": "Asia/Hong_Kong", "open": time(9, 30), "close": time(16, 0)},
+    "Singapore": {"tz": "Asia/Singapore", "open": time(9, 0), "close": time(17, 0)},
+}
+
+
 def get_market_status():
-    """Determine current market status"""
-    now = datetime.now()
-    hour = now.hour
+    """Determine current market status using timezone-aware logic."""
+    utc_now = datetime.now(ZoneInfo("UTC"))
+    status_messages = []
 
-    status = []
+    for market_name, market_info in MARKET_TIMEZONES.items():
+        market_tz = ZoneInfo(market_info["tz"])
+        market_time = utc_now.astimezone(market_tz)
+        
+        is_trading = False
+        # Check for weekdays (Monday=0, Sunday=6) and if within trading hours
+        if 0 <= market_time.weekday() <= 4:  # Monday to Friday
+            if market_info["open"] <= market_time.time() < market_info["close"]:
+                is_trading = True
+        
+        if is_trading:
+            status_messages.append(f"🟢 {market_name} Market: Trading")
+        elif market_time.time() >= market_info["close"] or market_time.weekday() > 4:
+            status_messages.append(f"🔴 {market_name} Market: Closed")
+        else:
+            status_messages.append(f"⏰ {market_name} Market: Pre-market/After hours")
 
-    # Simple market open determination (timezone not considered)
-    if 9 <= hour < 15:
-        status.append("🟢 Tokyo Market: Trading")
-    elif 15 <= hour < 18:
-        status.append("🔴 Tokyo Market: Closed")
-    else:
-        status.append("⏰ Tokyo Market: After hours")
-
-    if 21 <= hour or hour < 4:
-        status.append("🟢 US Market: Trading (previous day)")
-    else:
-        status.append("🔴 US Market: Closed")
-
-    return "\n".join(status)
+    return "\n".join(status_messages)
 
 
 def generate_checklist():

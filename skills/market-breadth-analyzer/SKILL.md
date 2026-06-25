@@ -15,18 +15,11 @@ Quantify market breadth health using a data-driven 6-component scoring system (0
 
 ## When to Use This Skill
 
-**English:**
 - User asks "Is the market rally broad-based?" or "How healthy is market breadth?"
 - User wants to assess market participation rate
 - User asks about advance-decline indicators or breadth thrust
 - User wants to know if the market is narrowing (fewer stocks participating)
 - User asks about equity exposure levels based on breadth conditions
-
-**Japanese:**
-- 「マーケットブレッドスはどうですか？」「市場の参加率は？」
-- 「上昇は広がっている？」「一部の銘柄だけの上昇？」
-- ブレッドス指標に基づくエクスポージャー判断
-- 市場の健康度をデータで確認したい
 
 ## Prerequisites
 

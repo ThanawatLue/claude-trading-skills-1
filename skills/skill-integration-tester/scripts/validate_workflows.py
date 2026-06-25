@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate multi-skill workflows defined in CLAUDE.md.
+"""Validate multi-skill workflows defined in GEMINI.md.
 
 Parses workflow definitions, checks skill existence, validates inter-skill
 data contracts (JSON schema compatibility), verifies file naming conventions,
@@ -16,195 +16,64 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-# ── Display-name → directory-name mapping ────────────────────────────
 
-_DISPLAY_MAP: dict[str, str] = {
-    "economic calendar fetcher": "economic-calendar-fetcher",
-    "earnings calendar": "earnings-calendar",
-    "market news analyst": "market-news-analyst",
-    "breadth chart analyst": "breadth-chart-analyst",
-    "sector analyst": "sector-analyst",
-    "technical analyst": "technical-analyst",
-    "market environment analysis": "market-environment-analysis",
-    "us market bubble detector": "us-market-bubble-detector",
-    "us stock analysis": "us-stock-analysis",
-    "backtest expert": "backtest-expert",
-    "options strategy advisor": "options-strategy-advisor",
-    "portfolio manager": "portfolio-manager",
-    "earnings trade analyzer": "earnings-trade-analyzer",
-    "pead screener": "pead-screener",
-    "pair trade screener": "pair-trade-screener",
-    "value dividend screener": "value-dividend-screener",
-    "dividend growth pullback screener": "dividend-growth-pullback-screener",
-    "position sizer": "position-sizer",
-    "data quality checker": "data-quality-checker",
-    "theme detector": "theme-detector",
-    "finviz screener": "finviz-screener",
-    "vcp screener": "vcp-screener",
-    "canslim screener": "canslim-screener",
-    "edge candidate agent": "edge-candidate-agent",
-    "edge hint extractor": "edge-hint-extractor",
-    "edge concept synthesizer": "edge-concept-synthesizer",
-    "edge strategy designer": "edge-strategy-designer",
-    "edge strategy reviewer": "edge-strategy-reviewer",
-    "edge pipeline orchestrator": "edge-pipeline-orchestrator",
-    "kanchi dividend sop": "kanchi-dividend-sop",
-    "kanchi dividend review monitor": "kanchi-dividend-review-monitor",
-    "kanchi dividend us tax accounting": "kanchi-dividend-us-tax-accounting",
-    "market breadth analyzer": "market-breadth-analyzer",
-    "uptrend analyzer": "uptrend-analyzer",
-    "ftd detector": "ftd-detector",
-    "institutional flow tracker": "institutional-flow-tracker",
-    "screener skills": "_meta_screener_skills",
-    "analysis skills": "_meta_analysis_skills",
-    "monitor breakout entries with stop-loss": "_meta_monitor",
-    "manage market-neutral positions": "_meta_manage",
-    "monitor z-score signals and spread convergence": "_meta_monitor_zscore",
-    "feed review findings back to kanchi-dividend-sop before any additional buys": "_meta_feedback",
-}
+def _generate_display_map(skills_dir: Path) -> dict[str, str]:
+    """Dynamically generate the display name to directory name mapping."""
+    display_map: dict[str, str] = {}
+    for skill_path in skills_dir.iterdir():
+        if skill_path.is_dir() and not skill_path.name.startswith("_"): # Exclude _meta_ skills
+            skill_md = skill_path / "SKILL.md"
+            if skill_md.is_file():
+                fm_name = parse_frontmatter_name(skill_md)
+                if fm_name:
+                    display_map[fm_name.lower()] = skill_path.name
+    # Add meta skills explicitly as they don't have SKILL.md
+    display_map["screener skills"] = "_meta_screener_skills"
+    display_map["analysis skills"] = "_meta_analysis_skills"
+    display_map["monitor breakout entries with stop-loss"] = "_meta_monitor"
+    display_map["manage market-neutral positions"] = "_meta_manage"
+    display_map["monitor z-score signals and spread convergence"] = "_meta_monitor_zscore"
+    display_map["feed review findings back to kanchi-dividend-sop before any additional buys"] = "_meta_feedback"
+    return display_map
 
 # ── Skill output contracts ───────────────────────────────────────────
 
-SKILL_CONTRACTS: dict[str, dict[str, Any]] = {
-    "economic-calendar-fetcher": {
-        "output_format": "json+md",
-        "output_pattern": "economic_calendar_*.{json,md}",
-        "output_fields": ["date", "event", "impact", "country"],
-        "api_keys": ["FMP_API_KEY"],
-    },
-    "earnings-calendar": {
-        "output_format": "json+md",
-        "output_pattern": "earnings_calendar_*.{json,md}",
-        "output_fields": ["symbol", "date", "eps_estimate", "revenue_estimate"],
-        "api_keys": ["FMP_API_KEY"],
-    },
-    "earnings-trade-analyzer": {
-        "output_format": "json+md",
-        "output_pattern": "earnings_trade_*.{json,md}",
-        "output_fields": [
-            "symbol",
-            "grade",
-            "gap_pct",
-            "volume_ratio",
-            "trend_score",
-        ],
-        "api_keys": ["FMP_API_KEY"],
-    },
-    "pead-screener": {
-        "output_format": "json+md",
-        "output_pattern": "pead_*.{json,md}",
-        "output_fields": ["symbol", "status", "entry_price", "stop_loss"],
-        "api_keys": ["FMP_API_KEY"],
-    },
-    "edge-candidate-agent": {
-        "output_format": "json",
-        "output_pattern": "market_summary.json",
-        "output_fields": ["date", "market_summary", "anomalies"],
-        "api_keys": [],
-    },
-    "edge-hint-extractor": {
-        "output_format": "yaml",
-        "output_pattern": "hints.yaml",
-        "output_fields": ["hints"],
-        "api_keys": [],
-    },
-    "edge-concept-synthesizer": {
-        "output_format": "yaml",
-        "output_pattern": "edge_concepts.yaml",
-        "output_fields": ["concepts"],
-        "api_keys": [],
-    },
-    "edge-strategy-designer": {
-        "output_format": "yaml",
-        "output_pattern": "strategy_drafts/*.yaml",
-        "output_fields": ["strategy_name", "entry", "exit", "risk"],
-        "api_keys": [],
-    },
-    "edge-strategy-reviewer": {
-        "output_format": "yaml",
-        "output_pattern": "review.yaml",
-        "output_fields": ["verdict", "score", "feedback"],
-        "api_keys": [],
-    },
-    "value-dividend-screener": {
-        "output_format": "json",
-        "output_pattern": "dividend_screen_*.json",
-        "output_fields": ["symbol", "dividend_yield", "payout_ratio", "score"],
-        "api_keys": ["FMP_API_KEY"],
-    },
-    "dividend-growth-pullback-screener": {
-        "output_format": "json",
-        "output_pattern": "dividend_growth_*.json",
-        "output_fields": ["symbol", "div_growth_rate", "rsi", "score"],
-        "api_keys": ["FMP_API_KEY"],
-    },
-    "position-sizer": {
-        "output_format": "json+md",
-        "output_pattern": "position_size_*.{json,md}",
-        "output_fields": ["shares", "position_value", "risk_amount"],
-        "api_keys": [],
-    },
-    "data-quality-checker": {
-        "output_format": "json+md",
-        "output_pattern": "data_quality_*.{json,md}",
-        "output_fields": ["file", "checks", "pass_count", "fail_count"],
-        "api_keys": [],
-    },
-    "theme-detector": {
-        "output_format": "json+md",
-        "output_pattern": "theme_*.{json,md}",
-        "output_fields": ["themes", "sector_correlation"],
-        "api_keys": [],
-    },
-    "pair-trade-screener": {
-        "output_format": "json",
-        "output_pattern": "pair_trade_*.json",
-        "output_fields": [
-            "pair",
-            "correlation",
-            "cointegration_pvalue",
-            "z_score",
-        ],
-        "api_keys": ["FMP_API_KEY"],
-    },
-}
+_SKILL_CONTRACTS: dict[str, dict[str, Any]] = {}  # Will be loaded dynamically
+
+def _load_skill_contracts(project_root: Path) -> dict[str, Any]:
+    """Load skill contracts from a JSON file."""
+    contracts_path = project_root / "skills" / "skill-integration-tester" / "references" / "workflow_contracts" / "skill_contracts.json"
+    try:
+        with contracts_path.open("r", encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        print(f"Error: Skill contracts file not found at {contracts_path}", file=sys.stderr)
+        sys.exit(1)
+    except json.JSONDecodeError:
+        print(f"Error: Invalid JSON in skill contracts file at {contracts_path}", file=sys.stderr)
+        sys.exit(1)
+
 
 # ── Handoff contracts (producer → consumer) ──────────────────────────
 
-HANDOFF_CONTRACTS: dict[tuple[str, str], dict[str, Any]] = {
-    ("earnings-trade-analyzer", "pead-screener"): {
-        "mechanism": "file_param",
-        "param": "--candidates-json",
-        "required_fields": ["symbol", "grade", "gap_pct"],
-        "description": (
-            "PEAD Screener reads earnings-trade-analyzer JSON output via --candidates-json"
-        ),
-    },
-    ("edge-candidate-agent", "edge-hint-extractor"): {
-        "mechanism": "file_param",
-        "param": "--market-summary,--anomalies",
-        "required_fields": ["market_summary", "anomalies"],
-        "description": ("Hint extractor reads market_summary.json and anomalies.json"),
-    },
-    ("edge-hint-extractor", "edge-concept-synthesizer"): {
-        "mechanism": "file_param",
-        "param": "--hints",
-        "required_fields": ["hints"],
-        "description": "Concept synthesizer reads hints.yaml",
-    },
-    ("edge-concept-synthesizer", "edge-strategy-designer"): {
-        "mechanism": "file_param",
-        "param": "--concepts",
-        "required_fields": ["concepts"],
-        "description": "Strategy designer reads edge_concepts.yaml",
-    },
-    ("edge-strategy-designer", "edge-strategy-reviewer"): {
-        "mechanism": "file_param",
-        "param": "--drafts-dir",
-        "required_fields": ["strategy_name", "entry", "exit"],
-        "description": "Strategy reviewer reads strategy draft YAML files",
-    },
-}
+_HANDOFF_CONTRACTS: dict[tuple[str, str], dict[str, Any]] = {}  # Will be loaded dynamically
+
+def _load_handoff_contracts(project_root: Path) -> dict[tuple[str, str], Any]:
+    """Load handoff contracts from a JSON file, converting string keys to tuples."""
+    contracts_path = project_root / "skills" / "skill-integration-tester" / "references" / "workflow_contracts" / "handoff_contracts.json"
+    try:
+        with contracts_path.open("r", encoding="utf-8") as f:
+            raw_contracts = json.load(f)
+            # Convert string keys like "producer_consumer" to tuple keys (producer, consumer)
+            return {
+                tuple(k.split("_", 1)): v for k, v in raw_contracts.items()
+            }
+    except FileNotFoundError:
+        print(f"Error: Handoff contracts file not found at {contracts_path}", file=sys.stderr)
+        sys.exit(1)
+    except json.JSONDecodeError:
+        print(f"Error: Invalid JSON in handoff contracts file at {contracts_path}", file=sys.stderr)
+        sys.exit(1)
 
 
 # ── Core functions ───────────────────────────────────────────────────
@@ -220,7 +89,7 @@ def resolve_skill_name(display_name: str) -> str:
 
 
 def parse_workflows(text: str) -> dict[str, list[dict[str, str]]]:
-    """Parse multi-skill workflow definitions from CLAUDE.md content.
+    """Parse multi-skill workflow definitions from GEMINI.md content.
 
     Returns dict mapping workflow name to list of steps, each step
     being {"skill_display": ..., "action": ...}.
@@ -321,9 +190,9 @@ def validate_handoff(producer: str, consumer: str, skills_dir: Path) -> dict[str
         return result
 
     pair = (producer, consumer)
-    if pair in HANDOFF_CONTRACTS:
-        contract = HANDOFF_CONTRACTS[pair]
-        producer_contract = SKILL_CONTRACTS.get(producer, {})
+    if pair in _HANDOFF_CONTRACTS:
+        contract = _HANDOFF_CONTRACTS[pair]
+        producer_contract = _SKILL_CONTRACTS.get(producer, {})
         producer_fields = set(producer_contract.get("output_fields", []))
         required = set(contract.get("required_fields", []))
 
@@ -365,13 +234,13 @@ def validate_workflow(
         exists = is_meta or check_skill_exists(skill_name, skills_dir)
 
         step_result = {
-            "index": i + 1,
-            "skill_display": step["skill_display"],
-            "skill_name": skill_name,
-            "action": step["action"],
-            "exists": exists,
-            "is_meta": is_meta,
-            "has_contract": skill_name in SKILL_CONTRACTS,
+        "index": i + 1,
+        "skill_display": step["skill_display"],
+        "skill_name": skill_name,
+        "action": step["action"],
+        "exists": exists,
+        "is_meta": is_meta,
+        "has_contract": skill_name in _SKILL_CONTRACTS,
         }
         result["steps"].append(step_result)
 
@@ -411,11 +280,11 @@ def create_dry_run_fixtures(
     for _wf_name, steps in workflows.items():
         for step in steps:
             skill_name = resolve_skill_name(step["skill_display"])
-            if skill_name in seen or skill_name not in SKILL_CONTRACTS:
+            if skill_name in seen or skill_name not in _SKILL_CONTRACTS:
                 continue
             seen.add(skill_name)
 
-            contract = SKILL_CONTRACTS[skill_name]
+            contract = _SKILL_CONTRACTS[skill_name]
             fields = contract.get("output_fields", [])
             fixture: dict[str, Any] = {
                 "_fixture": True,
@@ -541,13 +410,13 @@ def generate_report(
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description=("Validate multi-skill workflows defined in CLAUDE.md"),
+        description=("Validate multi-skill workflows defined in GEMINI.md"),
     )
     parser.add_argument(
-        "--claude-md",
+        "--gemini-md",
         type=str,
         default=None,
-        help="Path to CLAUDE.md (default: auto-detect from project root)",
+        help="Path to GEMINI.md (default: auto-detect from project root)",
     )
     parser.add_argument(
         "--skills-dir",
@@ -578,13 +447,22 @@ def main(argv: list[str] | None = None) -> int:
     # Resolve project root (script is at skills/<name>/scripts/<file>.py)
     project_root = Path(__file__).resolve().parents[3]
 
-    claude_md_path = Path(args.claude_md) if args.claude_md else project_root / "CLAUDE.md"
+    gemini_md_path = Path(args.gemini_md) if args.gemini_md else project_root / "GEMINI.md"
     skills_dir = Path(args.skills_dir) if args.skills_dir else project_root / "skills"
     output_dir = Path(args.output_dir)
 
-    if not claude_md_path.is_file():
+    global _DISPLAY_MAP
+    _DISPLAY_MAP = _generate_display_map(skills_dir)
+
+    global _SKILL_CONTRACTS
+    _SKILL_CONTRACTS = _load_skill_contracts(project_root)
+
+    global _HANDOFF_CONTRACTS
+    _HANDOFF_CONTRACTS = _load_handoff_contracts(project_root)
+
+    if not gemini_md_path.is_file():
         print(
-            f"Error: CLAUDE.md not found at {claude_md_path}",
+            f"Error: GEMINI.md not found at {gemini_md_path}",
             file=sys.stderr,
         )
         return 1
@@ -595,13 +473,15 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 1
+    # The `resolve_skill_name` function uses `_DISPLAY_MAP`, so we need to ensure
+    # it's initialized before `resolve_skill_name` is called.
 
     # Parse workflows
-    content = claude_md_path.read_text(encoding="utf-8")
+    content = gemini_md_path.read_text(encoding="utf-8")
     workflows = parse_workflows(content)
 
     if not workflows:
-        print("Warning: No workflows found in CLAUDE.md", file=sys.stderr)
+        print("Warning: No workflows found in GEMINI.md", file=sys.stderr)
         return 0
 
     # Filter to specific workflow if requested

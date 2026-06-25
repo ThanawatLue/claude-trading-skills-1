@@ -727,17 +727,107 @@ def test_run_converts_name_to_title_and_adds_id(mine_module, tmp_path: Path):
     assert candidates[0]["id"] != candidates[1]["id"]
 
 
-# ── PROJECT_ALLOWLIST ──
+def test_aggregate_signals(mine_module):
+    """Test that _aggregate_signals correctly aggregates signals from multiple sessions."""
+    all_signals = [
+        {
+            "project": "proj1",
+            "session": "sess1.jsonl",
+            "signals": {
+                "skill_usage": {"count": 2, "skills": {"skill_a": 1, "skill_b": 1}},
+                "errors": {"count": 1, "samples": ["Error in sess1"]},
+                "repetitive_patterns": {"count": 0, "patterns": []},
+                "automation_requests": {"count": 1, "samples": ["Auto req in sess1"]},
+                "unresolved_requests": {"count": 0},
+            },
+        },
+        {
+            "project": "proj2",
+            "session": "sess2.jsonl",
+            "signals": {
+                "skill_usage": {"count": 1, "skills": {"skill_b": 1}},
+                "errors": {"count": 0, "samples": []},
+                "repetitive_patterns": {"count": 1, "patterns": ["pattern_x"]},
+                "automation_requests": {"count": 0, "samples": []},
+                "unresolved_requests": {"count": 1},
+            },
+        },
+    ]
+
+    aggregated = mine_module._aggregate_signals(all_signals)
+
+    assert aggregated["skill_usage"]["count"] == 3
+    assert aggregated["skill_usage"]["skills"] == {"skill_a": 1, "skill_b": 2}
+    assert aggregated["errors"]["count"] == 1
+    assert "Error in sess1" in aggregated["errors"]["samples"]
+    assert aggregated["repetitive_patterns"]["count"] == 1
+    assert "pattern_x" in aggregated["repetitive_patterns"]["patterns"]
+    assert aggregated["automation_requests"]["count"] == 1
+    assert "Auto req in sess1" in aggregated["automation_requests"]["samples"]
+    assert aggregated["unresolved_requests"]["count"] == 1
 
 
-def test_project_allowlist_contains_trading_projects(mine_module):
-    """Allowlist includes all expected trading-related projects."""
-    al = mine_module.PROJECT_ALLOWLIST
-    assert "claude-trading-skills" in al
-    assert "weekly-trade-strategy" in al
-    assert "claude-market-agents" in al
-    assert "trade-edge-finder" in al
-    assert "trade-strategy-pipeline" in al
+# ── LLM failure modes ──
+
+def test_abstract_with_llm_raises_error_if_no_gemini_adapter_and_not_dry_run(mine_module):
+    """abstract_with_llm raises ImportError if gemini_adapter is None and not dry_run."""
+    import gemini_adapter # This import should be mocked to be None
+
+    # Temporarily set gemini_adapter to None
+    original_gemini_adapter = mine_module.gemini_adapter
+    mine_module.gemini_adapter = None
+
+    with pytest.raises(ImportError, match="gemini_adapter is not available."):
+        mine_module.abstract_with_llm({}, [], "test-project", dry_run=False)
+
+    # Restore gemini_adapter
+    mine_module.gemini_adapter = original_gemini_adapter
+
+
+def test_abstract_with_llm_logs_warning_on_invalid_json(mine_module, caplog):
+    """abstract_with_llm logs a warning if LLM returns invalid JSON."""
+    from unittest.mock import MagicMock, patch
+
+    mock_gemini_adapter = MagicMock()
+    mock_gemini_adapter.call_gemini.return_value = "this is not json"
+    mock_gemini_adapter.extract_json_from_text.return_value = None # Simulate JSON parsing failure
+
+    # Temporarily set gemini_adapter mock
+    original_gemini_adapter = mine_module.gemini_adapter
+    mine_module.gemini_adapter = mock_gemini_adapter
+
+    with caplog.at_level(mine_module.logging.WARNING):
+        result = mine_module.abstract_with_llm({}, [], "test-project", dry_run=False)
+
+    assert result is None
+    assert "Gemini abstraction returned invalid or empty JSON." in caplog.text
+    assert "this is not json" in caplog.text # Raw response should be logged
+
+    # Restore gemini_adapter
+    mine_module.gemini_adapter = original_gemini_adapter
+
+
+def test_abstract_with_llm_logs_warning_on_missing_candidates_key(mine_module, caplog):
+    """abstract_with_llm logs a warning if LLM returns valid JSON but without 'candidates' key."""
+    from unittest.mock import MagicMock, patch
+
+    mock_gemini_adapter = MagicMock()
+    mock_gemini_adapter.call_gemini.return_value = '{"not_candidates": []}'
+    mock_gemini_adapter.extract_json_from_text.return_value = {"not_candidates": []}
+
+    # Temporarily set gemini_adapter mock
+    original_gemini_adapter = mine_module.gemini_adapter
+    mine_module.gemini_adapter = mock_gemini_adapter
+
+    with caplog.at_level(mine_module.logging.WARNING):
+        result = mine_module.abstract_with_llm({}, [], "test-project", dry_run=False)
+
+    assert result is None
+    assert "Gemini abstraction returned invalid or empty JSON." in caplog.text
+    assert '{"not_candidates": []}' in caplog.text # Raw response should be logged
+
+    # Restore gemini_adapter
+    mine_module.gemini_adapter = original_gemini_adapter
 
 
 # ── filter_non_trading_candidates ──

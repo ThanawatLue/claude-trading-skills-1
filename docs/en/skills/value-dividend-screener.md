@@ -3,7 +3,7 @@ layout: default
 title: "Value Dividend Screener"
 grand_parent: English
 parent: Skill Guides
-nav_order: 44
+nav_order: 68
 lang_peer: /ja/skills/value-dividend-screener/
 permalink: /en/skills/value-dividend-screener/
 ---
@@ -55,10 +55,23 @@ Invoke this skill when the user requests:
 
 ## 3. Prerequisites
 
-- **FMP API key** required (`FMP_API_KEY` environment variable)
-- **FINVIZ Elite** optional (improves performance)
-- FMP for analysis; FINVIZ reduces execution time by 70-80%
-- Python 3.9+ recommended
+To use this skill, you will need:
+
+1.  **API Keys**:
+    *   **FMP API Key**: Required for all screening. Obtainable from [Financial Modeling Prep](https://financialmodelingprep.com/developer/docs).
+    *   **FINVIZ API Key**: (Optional, but recommended for two-stage screening) Requires a FINVIZ Elite subscription. This key allows pre-screening to reduce FMP API usage.
+    Set these as environment variables:
+    ```bash
+    export FMP_API_KEY=your_fmp_key_here
+    export FINVIZ_API_KEY=your_finviz_key_here # Only if using FINVIZ
+    ```
+
+2.  **Python Packages**:
+    *   `requests`: For making HTTP requests to APIs.
+    You can install it using pip:
+    ```bash
+    pip install requests
+    ```
 
 ---
 
@@ -192,57 +205,6 @@ python3 scripts/screen_dividend_stocks.py --fmp-api-key $FMP_API_KEY
    - Same detailed analysis as two-stage approach
 3. Composite scoring and ranking
 4. Output top N stocks to JSON file
-
-**Expected runtime (FMP-Only):** 5-15 minutes for 100-300 candidates (rate limiting applies)
-
-**API Usage Comparison:**
-- Two-Stage: ~50-100 FMP API calls (FINVIZ pre-filters to ~30 stocks)
-- FMP-Only: ~500-1500 FMP API calls (analyzes all screener results)
-
-### Step 3: Parse and Analyze Results
-
-Read the generated JSON file:
-
-```python
-import json
-
-with open('dividend_screener_results.json', 'r') as f:
-    data = json.load(f)
-
-metadata = data['metadata']
-stocks = data['stocks']
-```
-
-**Key data points per stock:**
-- Basic info: `symbol`, `company_name`, `sector`, `market_cap`, `price`
-- Valuation: `dividend_yield`, `pe_ratio`, `pb_ratio`
-- Growth metrics: `dividend_cagr_3y`, `revenue_cagr_3y`, `eps_cagr_3y`
-- Sustainability: `payout_ratio`, `fcf_payout_ratio`, `dividend_sustainable`
-- Financial health: `debt_to_equity`, `current_ratio`, `financially_healthy`
-- Quality: `roe`, `profit_margin`, `quality_score`
-- Overall ranking: `composite_score`
-
-### Step 4: Generate Markdown Report
-
-Create structured markdown report for user with following sections:
-
-#### Report Structure
-
-```markdown
-# Value Dividend Stock Screening Report
-
-**Generated:** [Timestamp]
-**Screening Criteria:**
-- Dividend Yield: >= 3.5%
-- P/E Ratio: <= 20
-- P/B Ratio: <= 2
-- Dividend Growth (3Y CAGR): >= 5%
-- Revenue Trend: Positive over 3 years
-- EPS Trend: Positive over 3 years
-
-**Total Results:** [N] stocks
-
----
 
 ---
 

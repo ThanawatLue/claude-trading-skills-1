@@ -10,7 +10,7 @@ permalink: /en/skill-catalog/
 # Skill Catalog
 {: .no_toc }
 
-A comprehensive catalog of all 50 Claude Trading Skills organized by category. Badge indicators show API requirements at a glance.
+A comprehensive catalog of all 59 Claude Trading Skills organized by category. Badge indicators show API requirements at a glance.
 {: .fs-6 .fw-300 }
 
 > Use English skill names ("CANSLIM", "VCP", "FinViz", etc.) for best search results on this page.
@@ -45,6 +45,7 @@ A comprehensive catalog of all 50 Claude Trading Skills organized by category. B
 | **[CANSLIM Screener]({{ '/en/skills/canslim-screener/' | relative_url }})** | Full 7-component CANSLIM growth stock scoring (C, A, N, S, L, I, M). Composite 0-100 ratings with bear market protection. Phase 3 implements 100% of O'Neil's methodology | <span class="badge badge-api">FMP Required</span> |
 | **[VCP Screener]({{ '/en/skills/vcp-screener/' | relative_url }})** | Detects Mark Minervini's Volatility Contraction Pattern. 3-phase pipeline: Pre-filter, Trend Template, VCP Detection with pivot points and trade setups | <span class="badge badge-api">FMP Required</span> |
 | **[FinViz Screener]({{ '/en/skills/finviz-screener/' | relative_url }})** | Translates natural language (Japanese/English) into FinViz filter URLs. 500+ filter codes across fundamentals, technicals, and descriptives. **Theme cross-screening** (30+ themes × 268 sub-themes) for narrative-based searches like "AI × Logistics" or "Data Centers × Power". Opens results in Chrome | <span class="badge badge-free">No API</span> <span class="badge badge-optional">FINVIZ Optional</span> |
+| **[Thai Watchlist Builder]({{ '/en/skills/thai-watchlist-builder/' | relative_url }})** | Builds Thai SET watchlists for Growth, Value, Momentum, and Mean-Reversion buckets using TradingView Screener filters | <span class="badge badge-free">No API</span> |
 | **Value Dividend Screener** | Multi-phase dividend stock screening: value characteristics (P/E, P/B), income (yield), growth (3-year trends), sustainability, and quality scoring | <span class="badge badge-api">FMP Required</span> <span class="badge badge-optional">FINVIZ Optional</span> |
 | **Dividend Growth Pullback Screener** | Finds dividend growth stocks (12%+ annual growth, 1.5%+ yield) at oversold technical levels (RSI <= 40). Two-stage FINVIZ + FMP pipeline | <span class="badge badge-api">FMP Required</span> <span class="badge badge-optional">FINVIZ Optional</span> |
 | **Earnings Trade Analyzer** | Scores post-earnings stocks using 5 weighted factors: Gap Size (25%), Pre-Earnings Trend (30%), Volume Trend (20%), MA200 Position (15%), MA50 Position (10%). A/B/C/D grades | <span class="badge badge-api">FMP Required</span> |
@@ -64,6 +65,8 @@ A comprehensive catalog of all 50 Claude Trading Skills organized by category. B
 | **[Market News Analyst]({{ '/en/skills/market-news-analyst/' | relative_url }})** | Collects and analyzes market-moving news from the past 10 days via WebSearch. Impact scoring: (Price Impact x Breadth) x Forward Significance | <span class="badge badge-free">No API</span> |
 | **Market Environment Analysis** | Comprehensive global macro briefing covering equity indices, FX, commodities, yields, and sentiment with structured reporting templates | <span class="badge badge-free">No API</span> |
 | **[Market Breadth Analyzer]({{ '/en/skills/market-breadth-analyzer/' | relative_url }})** | Quantifies market breadth health using a data-driven 6-component scoring system (0-100) from publicly available CSV data | <span class="badge badge-free">No API</span> |
+| **[Thai Breadth Analyzer]({{ '/en/skills/thai-breadth-analyzer/' | relative_url }})** | Computes Thai SET breadth using TradingView Screener data: SMA50/SMA200 participation, advance-decline, new highs/lows, RSI distribution, and composite breadth score | <span class="badge badge-free">No API</span> |
+| **[Thai Sector Heatmap]({{ '/en/skills/thai-sector-heatmap/' | relative_url }})** | Generates Thai SET sector-rotation heatmaps from median 1M/3M/6M/YTD sector momentum | <span class="badge badge-free">No API</span> |
 | **Uptrend Analyzer** | Diagnoses breadth health using Uptrend Ratio Dashboard tracking ~2,800 US stocks across 11 sectors. 5-component composite scoring with warning overlays | <span class="badge badge-free">No API</span> |
 | **Macro Regime Detector** | Detects structural macro regime transitions (1-2 year horizon) using 6-component cross-asset ratio analysis (RSP/SPY, yield curve, credit, size factor, sector rotation) | <span class="badge badge-api">FMP Required</span> |
 | **[US Market Bubble Detector]({{ '/en/skills/us-market-bubble-detector/' | relative_url }})** | Data-driven bubble risk assessment using Minsky/Kindleberger framework. Two-phase evaluation: quantitative scoring (0-12) + strict qualitative adjustment (0-3). Five risk phases | <span class="badge badge-free">No API</span> |
@@ -94,6 +97,7 @@ A comprehensive catalog of all 50 Claude Trading Skills organized by category. B
 | **Portfolio Manager** | Portfolio analysis with Alpaca MCP Server integration. Asset allocation, sector diversification, risk metrics, HOLD/ADD/TRIM/SELL recommendations, rebalancing plans | <span class="badge badge-api">Alpaca Required</span> |
 | **[Trader Memory Core]({{ '/en/skills/trader-memory-core/' | relative_url }})** | Persistent thesis lifecycle tracker: register screener outputs as IDEA, manage state transitions through ENTRY_READY → ACTIVE → CLOSED, attach position sizing, schedule reviews, and generate postmortem reports with MAE/MFE | <span class="badge badge-optional">FMP Optional</span> |
 | **[Position Sizer]({{ '/en/skills/position-sizer/' | relative_url }})** | Risk-based position sizing using Fixed Fractional, ATR-based, and Kelly Criterion methods. Portfolio constraints (max position %, max sector %). Works offline | <span class="badge badge-free">No API</span> |
+| **[Paper Trade Simulator]({{ '/en/skills/paper-trade-simulator/' | relative_url }})** | Simulates trades without real money, tracks R-multiple P/L, MAE/MFE, journal entries, and discipline metrics in local SQLite state | <span class="badge badge-free">No API</span> |
 | **[Breakout Trade Planner]({{ '/en/skills/breakout-trade-planner/' | relative_url }})** | Generates Minervini-style breakout trade plans from VCP screener output. Worst-case entry Gate, stop-limit bracket templates (pre_place / post_confirm), portfolio heat management | <span class="badge badge-free">No API</span> |
 | **[Parabolic Short Trade Planner]({{ '/en/skills/parabolic-short-trade-planner/' | relative_url }})** | Daily Parabolic Short screener (5-factor weighted score) plus pre-market plan generator that emits three conditional triggers per candidate (5-min ORL break, first red 5-min, VWAP fail). Alpaca ETB-only short check via `requests` (no SDK), SEC Rule 201 SSR tracker, blocking vs advisory manual confirmation reasons | <span class="badge badge-api">FMP Required</span> <span class="badge badge-optional">Alpaca Optional</span> |
 | **[Exposure Coach]({{ '/en/skills/exposure-coach/' | relative_url }})** | Synthesizes outputs from breadth, regime, top-risk, and flow skills into a one-page Market Posture summary with net exposure ceiling (0-100%), growth-vs-value bias, and NEW_ENTRY_ALLOWED / REDUCE_ONLY / CASH_PRIORITY recommendation | <span class="badge badge-optional">FMP Optional</span> |
@@ -110,6 +114,7 @@ A comprehensive catalog of all 50 Claude Trading Skills organized by category. B
 | **Kanchi Dividend SOP** | Converts Kanchi-style 5-step dividend investing into a repeatable US-stock workflow. Screening, quality checks, valuation mapping, profit filters, pullback entry planning | <span class="badge badge-free">No API</span> |
 | **Kanchi Dividend Review Monitor** | Forced-review anomaly detection for T1-T5 triggers with deterministic OK/WARN/REVIEW outputs. Local rule-engine script with unit tests for trigger boundaries | <span class="badge badge-free">No API</span> |
 | **Kanchi Dividend US Tax Accounting** | US dividend tax classification and account-location workflow. Qualified vs ordinary assumptions, holding-period checks, and account placement tradeoffs | <span class="badge badge-free">No API</span> |
+| **[Thai Dividend Screener]({{ '/en/skills/thai-dividend-screener/' | relative_url }})** | Screens Thai SET dividend candidates with yield, valuation, liquidity, and trend-health filters from TradingView public data | <span class="badge badge-free">No API</span> |
 
 ---
 
@@ -252,5 +257,10 @@ A comprehensive catalog of all 50 Claude Trading Skills organized by category. B
 | Breakout Trade Planner | -- | -- | -- |
 | Ibd Distribution Day Monitor | -- | -- | -- |
 | Parabolic Short Trade Planner | -- | -- | -- |
+| Thai Breadth Analyzer | -- | -- | -- |
+| Thai Sector Heatmap | -- | -- | -- |
+| Thai Dividend Screener | -- | -- | -- |
+| Thai Watchlist Builder | -- | -- | -- |
+| Paper Trade Simulator | -- | -- | -- |
 
 "--" means not required. "Optional" means functionality is enhanced but the skill works without it.

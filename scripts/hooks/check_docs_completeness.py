@@ -2,7 +2,7 @@
 """Pre-commit hook: verify every skill has documentation pages.
 
 Scans skills/*/SKILL.md and checks that corresponding pages exist in
-docs/en/skills/ and docs/ja/skills/. Runs on all files (pass_filenames: false)
+docs/en/skills/. Runs on all files (pass_filenames: false)
 since it checks overall repository consistency.
 """
 
@@ -18,7 +18,6 @@ def find_skills_without_docs() -> list[str]:
     """Return list of error messages for skills missing documentation."""
     skills_dir = PROJECT_ROOT / "skills"
     docs_en_dir = PROJECT_ROOT / "docs" / "en" / "skills"
-    docs_ja_dir = PROJECT_ROOT / "docs" / "ja" / "skills"
     errors = []
 
     if not skills_dir.is_dir():

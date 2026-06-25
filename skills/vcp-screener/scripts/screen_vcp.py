@@ -430,9 +430,9 @@ def is_stale_price(
     recent = historical[:lookback]
     ranges = []
     for bar in recent:
-        high = bar.get("high", 0)
-        low = bar.get("low", 0)
-        close = bar.get("close", 0)
+        high = bar.get("high") or 0
+        low = bar.get("low") or 0
+        close = bar.get("close") or 0
         if close > 0:
             ranges.append((high - low) / close * 100)
 
@@ -484,6 +484,41 @@ def compute_entry_ready(
     return True
 
 
+def get_recent_expectancy(source_name: str, lookback: int = 15) -> tuple[Optional[float], int]:
+    """Get the average realized R-multiple of the last 15 closed trades for this source."""
+    import sqlite3
+    from pathlib import Path
+    
+    base_dir = Path(__file__).resolve().parents[3]
+    db_path = base_dir / "state" / "market_cache.db"
+    if not db_path.exists():
+        return None, 0
+    try:
+        conn = sqlite3.connect(str(db_path), timeout=5.0)
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='paper_trade'")
+        if not cur.fetchone():
+            conn.close()
+            return None, 0
+        rows = cur.execute(
+            """SELECT realized_r FROM paper_trade 
+               WHERE (source = ? OR source = ?) AND status != 'open' 
+               ORDER BY exit_at DESC LIMIT ?""",
+            (source_name, source_name.replace("-screener", ""), lookback)
+        ).fetchall()
+        conn.close()
+        if not rows:
+            return None, 0
+        realized = [r["realized_r"] for r in rows if r["realized_r"] is not None]
+        if not realized:
+            return None, 0
+        return sum(realized) / len(realized), len(realized)
+    except Exception as e:
+        print(f"  [Expectancy Check] Warning: Could not read paper trade stats: {e}", file=sys.stderr)
+        return None, 0
+
+
 def main():
     args = parse_arguments()
 
@@ -525,13 +560,13 @@ def main():
         print(f"  Using custom universe: {len(symbols)} stocks")
         constituents = [{"symbol": s, "name": s, "sector": "Custom"} for s in symbols]
     elif args.market == "TH":
-        print("  Fetching SET50 constituents...", end=" ", flush=True)
-        constituents = client.get_thai_constituents(index="SET50")
+        print("  Fetching SET100 constituents...", end=" ", flush=True)
+        constituents = client.get_thai_constituents(index="SET100")
         if not constituents:
             print("FAILED")
             sys.exit(1)
         symbols = [c["symbol"] for c in constituents]
-        universe_desc = f"SET50 ({len(symbols)} stocks)"
+        universe_desc = f"SET100 ({len(symbols)} stocks)"
         print(f"OK ({len(symbols)} stocks)")
     else:
         print("  Fetching S&P 500 constituents...", end=" ", flush=True)
@@ -754,6 +789,16 @@ def main():
 
     api_stats = client.get_api_stats()
 
+    # Query recent strategy expectancy for calibration
+    exp_r, count = get_recent_expectancy("vcp-screener", lookback=15)
+    if exp_r is not None:
+        print()
+        print(f"Strategy Expectancy Calibration:")
+        print(f"  Recent Expectancy (last {count} closed trades): {exp_r:+.2f}R")
+        if exp_r < 0:
+            print("  ⚠️ WARNING: Negative expectancy detected. Suggest raising entry threshold to 85+.")
+        print()
+
     metadata = {
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "market": args.market,
@@ -780,6 +825,11 @@ def main():
             "vcp_candidates": len(results),
         },
         "api_stats": api_stats,
+        "strategy_expectancy": {
+            "source": "vcp-screener",
+            "expectancy_r": exp_r,
+            "closed_trades_count": count
+        }
     }
 
     top_results = results[: args.top]

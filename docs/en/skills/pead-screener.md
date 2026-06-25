@@ -3,7 +3,7 @@ layout: default
 title: "PEAD Screener"
 grand_parent: English
 parent: Skill Guides
-nav_order: 34
+nav_order: 46
 lang_peer: /ja/skills/pead-screener/
 permalink: /en/skills/pead-screener/
 ---
@@ -47,6 +47,9 @@ Screen post-earnings gap-up stocks for PEAD (Post-Earnings Announcement Drift) p
 ## 3. Prerequisites
 
 - FMP API key (set `FMP_API_KEY` environment variable or pass `--api-key`)
+  ```bash
+  export FMP_API_KEY=your_api_key_here
+  ```
 - Free tier (250 calls/day) is sufficient for default screening
 - For Mode B: earnings-trade-analyzer JSON output file with schema_version "1.0"
 
@@ -136,3 +139,4 @@ Based on stages and ratings:
 - `skills/pead-screener/scripts/report_generator.py`
 - `skills/pead-screener/scripts/scorer.py`
 - `skills/pead-screener/scripts/screen_pead.py`
+- `skills/pead-screener/scripts/yf_client.py`

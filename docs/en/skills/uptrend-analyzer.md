@@ -3,7 +3,7 @@ layout: default
 title: "Uptrend Analyzer"
 grand_parent: English
 parent: Skill Guides
-nav_order: 43
+nav_order: 65
 lang_peer: /ja/skills/uptrend-analyzer/
 permalink: /en/skills/uptrend-analyzer/
 ---
@@ -36,20 +36,18 @@ Analyzes market breadth using Monty's Uptrend Ratio Dashboard data to diagnose t
 
 ## 2. When to Use
 
-**English:**
 - User asks "Is the market breadth healthy?" or "How broad is the rally?"
 - User wants to assess uptrend ratios across sectors
 - User asks about market participation or breadth conditions
 - User needs exposure guidance based on breadth analysis
 - User references Monty's Uptrend Dashboard or uptrend ratios
 
-
 ---
 
 ## 3. Prerequisites
 
-- **API Key:** None required
-- **Python 3.9+** recommended
+- Python 3
+- pip (Python package installer)
 
 ---
 

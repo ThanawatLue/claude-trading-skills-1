@@ -12,7 +12,7 @@ from pathlib import Path
 
 import hf_sync
 import yfinance as yf
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, Response, jsonify, render_template, request
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(BASE_DIR, "skills", "paper-trade-simulator", "scripts"))
@@ -33,6 +33,7 @@ from paper_trade import (
 )
 from paper_trade import (  # noqa: E402
     open_position as paper_open,
+    check_discipline_warnings as paper_discipline_check,
 )
 from update_marks import update_all as paper_update_marks  # noqa: E402
 
@@ -41,7 +42,19 @@ ROOT_DIR = BASE_DIR  # market breadth files land here
 DB_PATH = os.path.join(BASE_DIR, "state", "market_cache.db")
 
 # Subprocess environment: force UTF-8 I/O so emoji/unicode in scripts don't crash on Windows
-_SUBPROCESS_ENV = {**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"}
+# Set PYTHONPATH so spawned subprocesses can find the shared 'scripts.lib' and 'tv_client' packages
+_SUBPROCESS_ENV = {
+    **os.environ,
+    "PYTHONIOENCODING": "utf-8",
+    "PYTHONUTF8": "1",
+}
+_project_paths = [BASE_DIR, os.path.join(BASE_DIR, "scripts", "lib")]
+_existing_pythonpath = os.environ.get("PYTHONPATH", "")
+if _existing_pythonpath:
+    _SUBPROCESS_ENV["PYTHONPATH"] = os.pathsep.join(_project_paths + [_existing_pythonpath])
+else:
+    _SUBPROCESS_ENV["PYTHONPATH"] = os.pathsep.join(_project_paths)
+
 
 app = Flask(__name__)
 
@@ -228,6 +241,8 @@ def cleanup_old_files(keep_count: int = 2):
         # Root directory patterns
         os.path.join(ROOT_DIR, "market_breadth_20[0-9][0-9]-*.json"),
         os.path.join(ROOT_DIR, "market_breadth_20[0-9][0-9]-*.md"),
+        os.path.join(ROOT_DIR, "canslim_screener_*.json"),
+        os.path.join(ROOT_DIR, "canslim_screener_*.md"),
         # Reports directory patterns
         os.path.join(REPORTS_DIR, "vcp_screener_*.json"),
         os.path.join(REPORTS_DIR, "vcp_screener_*.md"),
@@ -266,6 +281,31 @@ def cleanup_old_files(keep_count: int = 2):
                     os.remove(f)
                 except Exception as e:
                     print(f"Error removing {f}: {e}", file=sys.stderr)
+
+
+def build_exposure_cmd(latest_mb: str, market: str) -> list[str]:
+    """Build the command to run the exposure coach with all available dimensions."""
+    cmd = [
+        sys.executable,
+        os.path.join(BASE_DIR, "skills", "exposure-coach", "scripts", "calculate_exposure.py"),
+        "--market",
+        market,
+        "--breadth",
+        latest_mb,
+    ]
+    latest_uptrend = latest_file_any(os.path.join(REPORTS_DIR, "uptrend_analysis_*.json"))
+    if latest_uptrend:
+        cmd.extend(["--uptrend", latest_uptrend])
+
+    if market == "US":
+        latest_top = latest_file_any(os.path.join(REPORTS_DIR, "market_top_*.json"))
+        if latest_top:
+            cmd.extend(["--top-risk", latest_top])
+        else:
+            latest_ibd = latest_file_any(os.path.join(REPORTS_DIR, "ibd_distribution_day_monitor_*.json"))
+            if latest_ibd:
+                cmd.extend(["--top-risk", latest_ibd])
+    return cmd
 
 
 def clean_unsuccessful_db_runs():
@@ -379,6 +419,8 @@ def api_run():
     log = []
 
     def _run(cmd, timeout=300, extra_env=None):
+        import time
+        start_t = time.time()
         env = {**_SUBPROCESS_ENV, **(extra_env or {})}
         try:
             r = subprocess.run(
@@ -391,21 +433,26 @@ def api_run():
                 timeout=timeout,
                 env=env,
             )
+            elapsed = round(time.time() - start_t, 1)
             return {
                 "cmd": os.path.basename(cmd[1]),
                 "ok": r.returncode == 0,
                 "out": r.stdout[-1000:],
                 "err": r.stderr[-1500:],
+                "elapsed": elapsed,
             }
         except subprocess.TimeoutExpired:
+            elapsed = round(time.time() - start_t, 1)
             return {
                 "cmd": os.path.basename(cmd[1]),
                 "ok": False,
                 "out": "",
                 "err": f"Timeout after {timeout}s",
+                "elapsed": elapsed,
             }
         except Exception as e:
-            return {"cmd": os.path.basename(cmd[1]), "ok": False, "out": "", "err": str(e)}
+            elapsed = round(time.time() - start_t, 1)
+            return {"cmd": os.path.basename(cmd[1]), "ok": False, "out": "", "err": str(e), "elapsed": elapsed}
 
     # ── Phase 1: Heavy Primary Scanners (Parallel Execution) ──────────────────────
     primary_tasks = [
@@ -434,9 +481,9 @@ def api_run():
                 "--market",
                 market,
                 "--max-candidates",
-                "50",
+                "100",
                 "--top",
-                "50",
+                "100",
             ],
             300,
             None,
@@ -466,7 +513,7 @@ def api_run():
                     "analyze_downtrends.py",
                 ),
                 "--max-stocks",
-                "100",
+                "30",
                 "--output-dir",
                 REPORTS_DIR,
             ],
@@ -581,14 +628,7 @@ def api_run():
         # 1. Exposure Coach (needs fresh market breadth output)
         dependent_tasks.append(
             (
-                [
-                    sys.executable,
-                    os.path.join(
-                        BASE_DIR, "skills", "exposure-coach", "scripts", "calculate_exposure.py"
-                    ),
-                    "--breadth",
-                    latest_mb,
-                ],
+                build_exposure_cmd(latest_mb, market),
                 60,
                 None,
             )
@@ -687,6 +727,321 @@ def api_run():
     clean_unsuccessful_db_runs()
 
     return jsonify({"status": status, "market": market, "run_at": run_at, "log": log})
+
+
+@app.route("/api/run/stream")
+def api_run_stream():
+    """Re-run analysis scripts and stream progress via SSE."""
+    market = request.args.get("market", "US").upper()
+    account_size = request.args.get("account_size", "50000")
+    risk_pct = request.args.get("risk_pct", "0.5")
+    target_r = request.args.get("target_r", "2.0")
+
+    def g():
+        log = []
+
+        def _run(cmd, timeout=300, extra_env=None):
+            import time
+            start_t = time.time()
+            env = {**_SUBPROCESS_ENV, **(extra_env or {})}
+            try:
+                r = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    cwd=BASE_DIR,
+                    timeout=timeout,
+                    env=env,
+                )
+                elapsed = round(time.time() - start_t, 1)
+                return {
+                    "cmd": os.path.basename(cmd[1]),
+                    "ok": r.returncode == 0,
+                    "out": r.stdout[-1000:],
+                    "err": r.stderr[-1500:],
+                    "elapsed": elapsed,
+                }
+            except subprocess.TimeoutExpired:
+                elapsed = round(time.time() - start_t, 1)
+                return {
+                    "cmd": os.path.basename(cmd[1]),
+                    "ok": False,
+                    "out": "",
+                    "err": f"Timeout after {timeout}s",
+                    "elapsed": elapsed,
+                }
+            except Exception as e:
+                elapsed = round(time.time() - start_t, 1)
+                return {"cmd": os.path.basename(cmd[1]), "ok": False, "out": "", "err": str(e), "elapsed": elapsed}
+
+        # ── Phase 1: Heavy Primary Scanners (Parallel Execution) ──────────────────────
+        primary_tasks = [
+            # 1. Market Breadth Analyzer
+            (
+                [
+                    sys.executable,
+                    os.path.join(
+                        BASE_DIR,
+                        "skills",
+                        "market-breadth-analyzer",
+                        "scripts",
+                        "market_breadth_analyzer.py",
+                    ),
+                    "--market",
+                    market,
+                ],
+                300,
+                None,
+            ),
+            # 2. VCP Screener
+            (
+                [
+                    sys.executable,
+                    os.path.join(BASE_DIR, "skills", "vcp-screener", "scripts", "screen_vcp.py"),
+                    "--market",
+                    market,
+                    "--max-candidates",
+                    "100",
+                    "--top",
+                    "100",
+                ],
+                300,
+                None,
+            ),
+            # 3. Uptrend Analyzer
+            (
+                [
+                    sys.executable,
+                    os.path.join(
+                        BASE_DIR, "skills", "uptrend-analyzer", "scripts", "uptrend_analyzer.py"
+                    ),
+                    "--output-dir",
+                    REPORTS_DIR,
+                ],
+                120,
+                None,
+            ),
+            # 4. Downtrend Duration Analyzer
+            (
+                [
+                    sys.executable,
+                    os.path.join(
+                        BASE_DIR,
+                        "skills",
+                        "downtrend-duration-analyzer",
+                        "scripts",
+                        "analyze_downtrends.py",
+                    ),
+                    "--max-stocks",
+                    "30",
+                    "--output-dir",
+                    REPORTS_DIR,
+                ],
+                300,
+                None,
+            ),
+        ]
+
+        # 5. CANSLIM Screener
+        primary_tasks.append(
+            (
+                [
+                    sys.executable,
+                    os.path.join(
+                        BASE_DIR, "skills", "canslim-screener", "scripts", "screen_canslim.py"
+                    ),
+                    "--market",
+                    market,
+                    "--max-candidates",
+                    "40",
+                    "--top",
+                    "40",
+                    "--output-dir",
+                    REPORTS_DIR,
+                ],
+                300,
+                None,
+            )
+        )
+
+        if market == "US":
+            primary_tasks.extend(
+                [
+                    # 6. IBD Distribution Day Monitor (US only)
+                    (
+                        [
+                            sys.executable,
+                            os.path.join(
+                                BASE_DIR,
+                                "skills",
+                                "ibd-distribution-day-monitor",
+                                "scripts",
+                                "ibd_monitor.py",
+                            ),
+                            "--output-dir",
+                            REPORTS_DIR,
+                        ],
+                        60,
+                        None,
+                    ),
+                    # 7. Earnings Trade Analyzer (US only)
+                    (
+                        [
+                            sys.executable,
+                            os.path.join(
+                                BASE_DIR,
+                                "skills",
+                                "earnings-trade-analyzer",
+                                "scripts",
+                                "analyze_earnings_trades.py",
+                            ),
+                            "--output-dir",
+                            REPORTS_DIR,
+                        ],
+                        600,
+                        None,
+                    ),
+                ]
+            )
+
+        if market == "TH":
+            # 6. Thai Swing Screener (TH only)
+            thai_swing_script = os.path.join(
+                BASE_DIR, "skills", "vcp-screener", "scripts", "screen_thai_swing.py"
+            )
+            if os.path.exists(thai_swing_script):
+                primary_tasks.append(
+                    ([sys.executable, thai_swing_script, "--output-dir", REPORTS_DIR], 180, None)
+                )
+            # 7-10. TV-powered Thai skills
+            tv_th_skills = [
+                ("thai-sector-heatmap", "generate_heatmap.py"),
+                ("thai-breadth-analyzer", "analyze_thai_breadth.py"),
+                ("thai-watchlist-builder", "build_watchlists.py"),
+                ("thai-dividend-screener", "screen_thai_dividends.py"),
+            ]
+            for skill_name, script_name in tv_th_skills:
+                script_path = os.path.join(BASE_DIR, "skills", skill_name, "scripts", script_name)
+                if os.path.exists(script_path):
+                    primary_tasks.append(
+                        ([sys.executable, script_path, "--output-dir", REPORTS_DIR], 120, None)
+                    )
+
+        # Count dependent tasks to get total
+        total_tasks = len(primary_tasks) + 2  # Exposure coach and Breakout trade planner
+
+        # Yield start event
+        yield f"event: start\ndata: {json.dumps({'total_tasks': total_tasks})}\n\n"
+
+        # Phase 1 Parallel Execution
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(primary_tasks)) as executor:
+            futures = {
+                executor.submit(_run, cmd, timeout, env): cmd for cmd, timeout, env in primary_tasks
+            }
+            for future in concurrent.futures.as_completed(futures):
+                res = future.result()
+                log.append(res)
+                yield f"event: task_done\ndata: {json.dumps(res)}\n\n"
+
+        # Phase 2
+        latest_mb = latest_file(os.path.join(ROOT_DIR, "market_breadth_20[0-9][0-9]-*.json"), market)
+        latest_vcp = latest_file(os.path.join(REPORTS_DIR, "vcp_screener_*.json"), market)
+
+        dependent_tasks = []
+        if latest_mb:
+            dependent_tasks.append(
+                (
+                    build_exposure_cmd(latest_mb, market),
+                    60,
+                    None,
+                )
+            )
+        else:
+            res = {
+                "cmd": "calculate_exposure.py",
+                "ok": False,
+                "out": "",
+                "err": "No market breadth output found — run market breadth analyzer first",
+            }
+            log.append(res)
+            yield f"event: task_done\ndata: {json.dumps(res)}\n\n"
+
+        if latest_vcp:
+            dependent_tasks.append(
+                (
+                    [
+                        sys.executable,
+                        os.path.join(
+                            BASE_DIR,
+                            "skills",
+                            "breakout-trade-planner",
+                            "scripts",
+                            "plan_breakout_trades.py",
+                        ),
+                        "--input",
+                        latest_vcp,
+                        "--account-size",
+                        account_size,
+                        "--risk-pct",
+                        risk_pct,
+                        "--target-r-multiple",
+                        target_r,
+                        "--output-dir",
+                        REPORTS_DIR,
+                    ],
+                    60,
+                    None,
+                )
+            )
+        else:
+            res = {
+                "cmd": "plan_breakout_trades.py",
+                "ok": False,
+                "out": "",
+                "err": "No VCP screener output found",
+            }
+            log.append(res)
+            yield f"event: task_done\ndata: {json.dumps(res)}\n\n"
+
+        if dependent_tasks:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=len(dependent_tasks)) as executor:
+                futures = {
+                    executor.submit(_run, cmd, timeout, env): cmd
+                    for cmd, timeout, env in dependent_tasks
+                }
+                for future in concurrent.futures.as_completed(futures):
+                    res = future.result()
+                    log.append(res)
+                    yield f"event: task_done\ndata: {json.dumps(res)}\n\n"
+
+        # Save snapshot
+        snapshot = _collect_snapshot(market)
+        breadth = snapshot.get("breadth")
+        vcp = snapshot.get("vcp")
+        is_success = (
+            breadth
+            and isinstance(breadth, dict)
+            and breadth.get("composite")
+            and vcp
+            and isinstance(vcp, dict)
+        )
+
+        if is_success:
+            run_at = db_save_run(market, snapshot)
+            status = "success"
+        else:
+            run_at = None
+            status = "failed"
+
+        cleanup_old_files(keep_count=2)
+        clean_unsuccessful_db_runs()
+
+        final_res = {"status": status, "market": market, "run_at": run_at, "log": log}
+        yield f"event: done\ndata: {json.dumps(final_res)}\n\n"
+
+    return Response(g(), mimetype="text/event-stream")
 
 
 @app.route("/api/history/<symbol>")
@@ -934,6 +1289,16 @@ def api_paper_journal():
         return jsonify(_clean_nan(row))
     except (KeyError, ValueError) as e:
         return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/paper/discipline_check")
+def api_paper_discipline_check():
+    """Return recent discipline warnings (low stop respect, FOMO streak)."""
+    try:
+        res = paper_discipline_check()
+        return jsonify(_clean_nan(res))
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

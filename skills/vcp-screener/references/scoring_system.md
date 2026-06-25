@@ -221,7 +221,7 @@ A stock is classified as `entry_ready=True` when all of the following conditions
 |-----------|-------------------|--------------|
 | `execution_state` | Not in (Invalid, Damaged, Overextended, Extended, Early-post-breakout) | — |
 | `valid_vcp` | `True` | `--no-require-valid-vcp` |
-| `distance_from_pivot_pct` | -8.0% to +3.0% | `--max-above-pivot` |
+| `distance_from_pivot_pct` | -8.0% to +3.0% (Note: -8.0% is the lower bound for an acceptable pullback) | `--max-above-pivot` |
 | `dry_up_ratio` | <= 1.0 | — |
 | `trade_status` | Not "BELOW STOP LEVEL" | — |
 | `risk_pct` | > 0% and <= 15.0% | `--max-risk` |

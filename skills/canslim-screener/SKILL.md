@@ -7,20 +7,26 @@ description: Screen US stocks using William O'Neil's CANSLIM growth stock method
 
 ## Overview
 
-This skill screens US stocks using William O'Neil's proven CANSLIM methodology, a systematic approach for identifying growth stocks with strong fundamentals and price momentum. CANSLIM analyzes 7 key components: **C**urrent Earnings, **A**nnual Growth, **N**ewness/New Highs, **S**upply/Demand, **L**eadership/RS Rank, **I**nstitutional Sponsorship, and **M**arket Direction.
+This skill screens US and Thai stocks using William O'Neil's proven CANSLIM methodology, a systematic approach for identifying growth stocks with strong fundamentals and price momentum. CANSLIM analyzes 7 key components: **C**urrent Earnings, **A**nnual Growth, **N**ewness/New Highs, **S**upply/Demand, **L**eadership/RS Rank, **I**nstitutional Sponsorship, and **M**arket Direction.
 
-**Phase 3** implements all 7 of 7 components (C, A, N, S, L, I, M), representing **100% of the full methodology**.
+**Phase 3.2** implements all 7 of 7 components (C, A, N, S, L, I, M), representing **100% of the full methodology** with adaptations for both US (`^GSPC`) and Thai (`^SET.BK`) markets.
 
 **Two-Stage Approach:**
-1. **Stage 1 (FMP API + Finviz)**: Analyze stock universe with all 7 CANSLIM components
+1. **Stage 1 (yfinance / FMP API + Finviz)**: Analyze stock universe with all 7 CANSLIM components
 2. **Stage 2 (Reporting)**: Rank by composite score and generate actionable reports
 
 **Key Features:**
 - Composite scoring (0-100 scale) with weighted components
-- **Finviz fallback** for institutional ownership data (automatic when FMP data incomplete)
-- Progressive filtering to optimize API usage
+- **Finviz fallback** for US institutional ownership data (automatic when FMP data incomplete)
+- **yfinance free client** integration requiring no API key (fully supports Thai `.BK` stocks)
+- **Thai Market Adjustments (Phase 3.2)**:
+  - Auto-benchmark selection to `^SET.BK` when running under Thai market context (`--market TH`)
+  - Relaxed rating bands (by 5 points) and lower minimum thresholds (e.g., Exceptional+ starts at 85)
+  - Institutional (I) component proxy using `percentInstitutions` ownership directly when detailed holder list is unavailable
+  - Capped quarterly EPS growth (at 500%) and additive EPS + Revenue scoring for turnaround stocks
+  - C component Earnings Acceleration bonus (+10) and penalty (-10) trend check
+  - Expanded universe list including ~56 growth/momentum Thai stocks (SET & MAI)
 - JSON + Markdown output formats
-- Interpretation bands: Exceptional+ (90+), Exceptional (80-89), Strong (70-79), Above Average (60-69)
 - Bear market protection (M component gating)
 
 **Phase 3.1 Component Weights (Original O'Neil weights):**
@@ -109,11 +115,17 @@ pip install requests beautifulsoup4 lxml
 - Quality warnings and data source notes
 - Summary statistics (rating distribution)
 
-**Rating Bands:**
+**Rating Bands (US Market):**
 - **Exceptional+ (90-100):** All components near-perfect, aggressive buy
 - **Exceptional (80-89):** Outstanding fundamentals + momentum, strong buy
 - **Strong (70-79):** Solid across components, standard buy
 - **Above Average (60-69):** Meets thresholds with minor weaknesses, buy on pullback
+
+**Rating Bands (Thai Market - Relaxed by 5 points):**
+- **Exceptional+ (85-100):** All components near-perfect, aggressive buy
+- **Exceptional (75-84):** Outstanding fundamentals + momentum, strong buy
+- **Strong (65-74):** Solid across components, standard buy
+- **Above Average (55-64):** Meets thresholds with minor weaknesses, buy on pullback
 
 ---
 
@@ -164,8 +176,12 @@ python3 skills/canslim-screener/scripts/screen_canslim.py \
   --universe AAPL MSFT GOOGL AMZN NVDA META TSLA
 ```
 
-**Option C: Sector-Specific**
-User can provide sector-focused list (Technology, Healthcare, etc.)
+**Option C: Thai Growth Stock Universe**
+Uses the pre-defined Thai growth and mid-cap momentum stock list (~56 stocks including DELTA, HANA, CPALL, SINGER, CCET, SAPPE, etc.) and automatically sets index benchmark to `^SET.BK`:
+
+```bash
+python3 skills/canslim-screener/scripts/screen_canslim.py --market TH --max-candidates 60
+```
 
 **API Budget Considerations (Phase 3):**
 - 40 stocks × 7 FMP calls/stock = 280 API calls
@@ -197,6 +213,9 @@ python3 screen_canslim.py --rs-benchmark SPY
 
 # Disable L component (saves per-stock 365-day fetch; L fixed at neutral 50)
 python3 screen_canslim.py --disable-rs
+
+# Screen Thai market with Thai adaptations (Phase 3.2)
+python3 screen_canslim.py --market TH --max-candidates 60 --top 20
 ```
 
 **Script Workflow (Phase 3 - Full CANSLIM):**
@@ -659,13 +678,10 @@ This is **Phase 3** implementing all 7 of 7 CANSLIM components:
 
 ---
 
-**Version:** Phase 3.1 (multi-period RS)
-**Last Updated:** 2026-05-03
-**API Requirements:** FMP API (free tier: up to 35 stocks; Starter tier recommended for 40 stocks) + BeautifulSoup/requests/lxml for Finviz
-**Execution Time:** ~2 minutes for 40 stocks
-**Output Formats:** JSON + Markdown (now includes Summary Table and `schema_version: "3.1"`)
-**Components Implemented:** C, A, N, S, L, I, M (7 of 7, 100% coverage)
-**Phase 3.1 additions:** multi-period RS (3m/6m/12m), `--rs-benchmark`, `--disable-rs`,
-new RS fields (`rs_rating`, `rs_rank_percentile`, `rs_3m_return`, `rs_6m_return`,
-`rs_12m_return`, `rs_benchmark`, `rs_benchmark_relative_return`, `rs_component_score`,
-`benchmark_52w_performance`).
+**Version:** Phase 3.2 (Thai Market Adaptation)
+**Last Updated:** 2026-06-04
+**API Requirements:** yfinance (free, no API key required for US/Thai markets) or FMP API + BeautifulSoup/requests/lxml for Finviz
+**Execution Time:** ~2 minutes for 40-56 stocks
+**Output Formats:** JSON + Markdown (includes Summary Table and `schema_version: "3.1"`)
+**Components Implemented:** C, A, N, S, L, I, M (7 of 7, 100% coverage with Thai adjustments)
+**Phase 3.2 additions:** Thai market parameters (`--market TH`), automatic benchmark redirection to `^SET.BK`, institutional ownership proxy for international stocks, relaxed rating bands (-5 points), adjusted minimum thresholds, capped EPS outlier at 500%, additive C component scoring, and Earnings Acceleration check (+10/-10).

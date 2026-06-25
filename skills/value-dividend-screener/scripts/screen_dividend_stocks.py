@@ -853,11 +853,14 @@ def screen_value_dividend_stocks(
         )
     else:
         print(
-            "Step 1: Initial screening using FMP Stock Screener (Dividend Yield >= 3.0%, P/E <= 20, P/B <= 2)...",
+            f"Step 1: Initial screening using FMP Stock Screener (Dividend Yield >= {args.dividend_yield_min}%, P/E <= {args.pe_max}, P/B <= {args.pb_max})...",
             file=sys.stderr,
         )
-        print("Criteria: Div Yield >= 3.0%, Div Growth >= 4.0% CAGR", file=sys.stderr)
-        candidates = client.screen_stocks(dividend_yield_min=3.0, pe_max=20, pb_max=2)
+        candidates = client.screen_stocks(
+            dividend_yield_min=args.dividend_yield_min,
+            pe_max=args.pe_max,
+            pb_max=args.pb_max
+        )
         print(f"Found {len(candidates)} initial candidates", file=sys.stderr)
 
     if not candidates:
@@ -1004,13 +1007,12 @@ def screen_value_dividend_stocks(
 
         # Calculate composite score (updated to include stability)
         composite_score = 0
-        composite_score += min(div_cagr / 10 * 15, 15)  # Max 15 points for 10%+ div growth
-        composite_score += stability_score * 0.2  # Max 20 points from stability (100 * 0.2)
-        composite_score += min((revenue_cagr or 0) / 10 * 10, 10)  # Max 10 points for revenue
-        composite_score += min((eps_cagr or 0) / 15 * 10, 10)  # Max 10 points for EPS
+        composite_score += min(div_cagr / 10 * 20, 20)  # Max 20 points for 10%+ div growth
+        composite_score += min((revenue_cagr or 0) / 10 * 15, 15)  # Max 15 points for revenue
+        composite_score += min((eps_cagr or 0) / 15 * 15, 15)  # Max 15 points for EPS
         composite_score += 10 if sustainability["sustainable"] else 0
         composite_score += 10 if financial_health["healthy"] else 0
-        composite_score += quality["quality_score"] * 0.25  # Max 25 points from quality
+        composite_score += quality["quality_score"] * 0.3  # Max 30 points from quality
 
         result = {
             "symbol": symbol,
@@ -1148,6 +1150,27 @@ Environment Variables:
         "--top", type=int, default=20, help="Number of top stocks to return (default: 20)"
     )
 
+    parser.add_argument(
+        "--dividend-yield-min",
+        type=float,
+        default=3.0,
+        help="Minimum dividend yield for FMP-only screening (default: 3.0)",
+    )
+
+    parser.add_argument(
+        "--pe-max",
+        type=float,
+        default=20.0,
+        help="Maximum P/E ratio for FMP-only screening (default: 20.0)",
+    )
+
+    parser.add_argument(
+        "--pb-max",
+        type=float,
+        default=2.0,
+        help="Maximum P/B ratio for FMP-only screening (default: 2.0)",
+    )
+
     args = parser.parse_args()
 
     # Get FMP API key
@@ -1199,22 +1222,21 @@ Environment Variables:
         "metadata": {
             "generated_at": datetime.utcnow().isoformat() + "Z",
             "criteria": {
-                "dividend_yield_min": 3.0,
-                "pe_ratio_max": 20,
-                "pb_ratio_max": 2,
+                "dividend_yield_min": args.dividend_yield_min,
+                "pe_ratio_max": args.pe_max,
+                "pb_ratio_max": args.pb_max,
                 "dividend_cagr_min": 4.0,
                 "dividend_stability": "low volatility, year-over-year growth",
                 "revenue_trend": "positive over 3 years",
                 "eps_trend": "positive over 3 years",
             },
             "scoring": {
-                "dividend_growth": "max 15 points (10%+ CAGR)",
-                "dividend_stability": "max 20 points (stable, growing)",
-                "revenue_growth": "max 10 points (10%+ CAGR)",
-                "eps_growth": "max 10 points (15%+ CAGR)",
+                "dividend_growth": "max 20 points (10%+ CAGR)",
+                "revenue_growth": "max 15 points (10%+ CAGR)",
+                "eps_growth": "max 15 points (15%+ CAGR)",
                 "dividend_sustainable": "10 points",
                 "financial_health": "10 points",
-                "quality_score": "max 25 points",
+                "quality_score": "max 30 points",
             },
             "total_results": len(results),
         },

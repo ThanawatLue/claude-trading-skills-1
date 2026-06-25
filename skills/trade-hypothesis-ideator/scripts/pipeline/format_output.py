@@ -6,14 +6,14 @@ import re
 from difflib import SequenceMatcher
 from typing import Any
 
-BANNED_PHRASES = [
-    "本番投入可能",
-    "確実に勝てる",
-    "production ready",
-    "guaranteed edge",
-    "sure to win",
-    "guaranteed profit",
-]
+import json
+import os
+
+_current_dir = os.path.dirname(__file__)
+_config_path = os.path.join(_current_dir, "../../config/banned_phrases.json")
+
+with open(_config_path, "r", encoding="utf-8") as f:
+    BANNED_PHRASES = json.load(f)
 
 _REQUIRED_CARD_FIELDS = (
     "hypothesis_id",

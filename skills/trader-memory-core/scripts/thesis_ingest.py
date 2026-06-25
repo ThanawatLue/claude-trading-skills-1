@@ -11,12 +11,19 @@ import logging
 import sys
 from pathlib import Path
 
+from jsonschema import validate
+from jsonschema.exceptions import ValidationError
+
 # Allow imports from sibling modules
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import thesis_store  # noqa: E402
 
 logger = logging.getLogger(__name__)
+
+_SCHEMAS_DIR = Path(__file__).resolve().parent.parent / "schemas"
+with open(_SCHEMAS_DIR / "thesis.schema.json") as f:
+    THESIS_SCHEMA = json.load(f)
 
 # -- Adapter registry ---------------------------------------------------------
 
@@ -333,24 +340,36 @@ def ingest(
     records = _extract_records(data, source)
 
     thesis_ids = []
+    failed_records_with_errors = []
     for record in records:
         try:
             thesis_data = adapter(record, input_file)
         except ValueError as e:
             logger.error("Adapter error for %s: %s", source, e)
+            failed_records_with_errors.append({"record": record, "error": str(e)})
             continue
         if thesis_data is None:
             continue  # skipped (e.g., edge research_only)
         # Inject source date so thesis_id and created_at reflect the report date
         if source_date and "_source_date" not in thesis_data:
             thesis_data["_source_date"] = source_date
+
+        try:
+            # Preliminary schema validation
+            validate(instance=thesis_data, schema=THESIS_SCHEMA)
+        except ValidationError as e:
+            logger.error("Schema validation failed for record from %s: %s", source, e.message)
+            failed_records_with_errors.append({"record": record, "error": e.message})
+            continue
+
         try:
             tid = thesis_store.register(state_path, thesis_data)
             thesis_ids.append(tid)
         except ValueError as e:
             logger.error("Failed to register from %s: %s", source, e)
+            failed_records_with_errors.append({"record": record, "error": str(e)})
 
-    return thesis_ids
+    return thesis_ids, failed_records_with_errors
 
 
 def _extract_source_date(data: dict | list) -> str | None:
@@ -405,9 +424,14 @@ if __name__ == "__main__":
     parser.add_argument("--state-dir", default="state/theses", help="Thesis state directory")
     args = parser.parse_args()
 
-    ids = ingest(args.source, args.input, args.state_dir)
-    if ids:
-        print(f"Registered {len(ids)} thesis(es): {', '.join(ids)}")
-    else:
+    successful_ids, failed_records = ingest(args.source, args.input, args.state_dir)
+    if successful_ids:
+        print(f"Successfully registered {len(successful_ids)} thesis(es): {', '.join(successful_ids)}")
+    if failed_records:
+        print(f"Failed to register {len(failed_records)} record(s) due to validation or adapter errors:")
+        for record_info in failed_records:
+            print(f"  Record: {record_info['record'].get('id') or record_info['record'].get('ticker') or 'N/A'}, Error: {record_info['error']}")
+        sys.exit(1)
+    elif not successful_ids: # No successful and no failed means no records were processed or all were skipped
         print("No theses registered.")
         sys.exit(1)

@@ -3,7 +3,7 @@ layout: default
 title: "Pair Trade Screener"
 grand_parent: English
 parent: Skill Guides
-nav_order: 33
+nav_order: 43
 lang_peer: /ja/skills/pair-trade-screener/
 permalink: /en/skills/pair-trade-screener/
 ---
@@ -69,9 +69,15 @@ Example user requests:
 
 ## 3. Prerequisites
 
-- **FMP API key** required (`FMP_API_KEY` environment variable)
-- Statistical arbitrage analysis
-- Python 3.9+ recommended
+- **Python Environment**: Python 3.8+
+- **Required Libraries**: `pandas`, `numpy`, `scipy`, `statsmodels`, `requests`
+  (Install via `pip install pandas numpy scipy statsmodels requests`)
+- **FMP API Key**: Required for fetching historical price data.
+  Set as an environment variable:
+  ```bash
+  export FMP_API_KEY="YOUR_API_KEY_HERE"
+  ```
+  Replace `YOUR_API_KEY_HERE` with your actual Financial Modeling Prep API key.
 
 ---
 
@@ -137,27 +143,20 @@ Narrow focus to specific industry within sector:
 
 **Objective:** Fetch price history for correlation and cointegration analysis.
 
-**Data Requirements:**
+Data Requirements:
 - Timeframe: 2 years (minimum 252 trading days)
 - Frequency: Daily closing prices
 - Adjustments: Adjusted for splits and dividends
 - Clean data: No gaps or missing values
 
-**FMP API Endpoint:**
+**Note:** Historical price data fetching is implicitly handled by the `scripts/find_pairs.py` and `scripts/analyze_spread.py` scripts.
+
+FMP API Endpoint:
 ```
 GET /v3/historical-price-full/{symbol}?apikey=YOUR_API_KEY
 ```
 
-**Data Validation:**
-- Verify consistent date ranges across all symbols
-- Remove stocks with >10% missing data
-- Fill minor gaps with forward-fill method
-- Log data quality issues
-
-**Script Execution:**
-```bash
-python scripts/fetch_price_data.py --sector Technology --lookback 730
-```
+Data Validation:
 
 ### Step 3: Calculate Correlation and Beta
 

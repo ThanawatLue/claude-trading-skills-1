@@ -62,7 +62,7 @@ def calculate_volume_pattern(
         }
 
     volumes = [d.get("volume", 0) for d in historical_prices]
-    closes = [d.get("close", d.get("adjClose", 0)) for d in historical_prices]
+    closes = [float(d.get("close") or d.get("adjClose") or 0) for d in historical_prices]
 
     # 50-day average volume (or available)
     vol_period = min(50, len(volumes))

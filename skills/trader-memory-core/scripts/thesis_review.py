@@ -8,10 +8,12 @@ import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+import urllib.error
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import thesis_store  # noqa: E402
+import fmp_price_adapter # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +56,7 @@ def compute_mae_mfe(thesis: dict, price_adapter: Any | None = None) -> dict[str,
 
     try:
         prices = price_adapter.get_daily_closes(thesis["ticker"], from_date, to_date)
-    except Exception as e:
+    except (urllib.error.URLError, ValueError) as e:
         logger.warning("Failed to fetch prices for %s: %s", thesis["ticker"], e)
         return result
 
@@ -265,6 +267,7 @@ def summary_stats(state_dir: str) -> dict:
 
 if __name__ == "__main__":
     import argparse
+    import os
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
@@ -291,7 +294,20 @@ if __name__ == "__main__":
         results = thesis_store.list_review_due(Path(args.state_dir), as_of)
         print(json.dumps(results, indent=2))
     elif args.command == "postmortem":
-        path = generate_postmortem(args.thesis_id, args.state_dir, journal_dir=args.journal_dir)
+        price_adapter = None
+        fmp_api_key = os.getenv("FMP_API_KEY")
+        if fmp_api_key:
+            price_adapter = fmp_price_adapter.FMPPriceAdapter(api_key=fmp_api_key)
+            logger.info("FMP API key found. MAE/MFE calculations enabled.")
+        else:
+            logger.warning("FMP_API_KEY not found. MAE/MFE calculations will be skipped.")
+
+        path = generate_postmortem(
+            args.thesis_id,
+            args.state_dir,
+            price_adapter=price_adapter,
+            journal_dir=args.journal_dir
+        )
         print(f"Postmortem generated: {path}")
     elif args.command == "summary":
         s = summary_stats(args.state_dir)

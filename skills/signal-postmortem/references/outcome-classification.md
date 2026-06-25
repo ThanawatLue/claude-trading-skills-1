@@ -38,22 +38,7 @@ This document defines how signal outcomes are classified in the postmortem proce
 - Outcome: NVDA at $870 after 5 days (-3.3%)
 - Classification: FALSE_POSITIVE_SEVERE
 
-### 3. MISSED_OPPORTUNITY
-
-**Definition**: A signal that was generated but not acted upon, and would have been profitable.
-
-**Use Cases**:
-- Signals filtered out by aggregator confidence threshold
-- Signals skipped due to position sizing constraints
-- Signals in watchlist but not traded
-
-**Criteria**:
-- Signal was generated but `trade_taken = false`
-- Realized return in predicted direction >= 2%
-
-**Note**: This category helps identify overly conservative filtering.
-
-### 4. REGIME_MISMATCH
+### 3. REGIME_MISMATCH
 
 **Definition**: Signal failed primarily due to a market regime change rather than skill error.
 
@@ -73,13 +58,39 @@ This document defines how signal outcomes are classified in the postmortem proce
 - RISK_OFF: VIX > 25, breadth < 40%, defensive rotation
 - TRANSITION: Mixed signals, high uncertainty
 
+### 4. NEUTRAL
+
+**Definition**: The signal outcome was flat, with the absolute realized return below a minimum threshold.
+
+**Criteria**:
+- Absolute realized return < 0.5% (for 5-day holding period)
+- Absolute realized return < 1.0% (for 20-day holding period)
+
+**Examples**:
+- Signal: LONG TSLA at $250
+- Outcome: TSLA at $250.10 after 5 days (+0.04%)
+- Classification: NEUTRAL
+
+**Note**: Neutral outcomes do not count as TRUE_POSITIVE or FALSE_POSITIVE and may indicate weak signal strength or market chop.
+
+## Future Classification Categories
+
+### MISSED_OPPORTUNITY (Future Feature)
+
+**Definition**: A signal that was generated but not acted upon, and would have been profitable.
+
+**Use Cases**:
+- Signals filtered out by aggregator confidence threshold
+- Signals skipped due to position sizing constraints
+- Signals in watchlist but not traded
+
+**Criteria**:
+- Signal was generated but `trade_taken = false`
+- Realized return in predicted direction >= 2%
+
+**Note**: This category helps identify overly conservative filtering.
+
 ## Edge Cases
-
-### Flat Outcome (|return| < 0.5%)
-
-- Classification: `NEUTRAL`
-- Does not count as TRUE_POSITIVE or FALSE_POSITIVE
-- May indicate weak signal strength
 
 ### Early Exit
 
@@ -117,8 +128,7 @@ A signal can be TRUE_POSITIVE at 5 days but FALSE_POSITIVE at 20 days (or vice v
 
 ```
 1. Was the trade taken?
-   NO  -> If would have been profitable: MISSED_OPPORTUNITY
-         Otherwise: SKIPPED (no postmortem needed)
+   NO  -> SKIPPED (no postmortem needed)
    YES -> Continue
 
 2. Did regime change during holding period?
@@ -156,7 +166,7 @@ When a human overrides a skill recommendation:
 - Record `human_override = true`
 - Separate analysis track for human decision quality
 
-## Confidence Adjustment Factors
+## Future Confidence Adjustment Factors (Future Feature)
 
 Classification confidence is adjusted based on:
 

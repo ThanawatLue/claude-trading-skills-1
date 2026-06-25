@@ -677,11 +677,13 @@ def rank_and_select(
 # --- Export Ticket ---
 
 
-def build_export_ticket_if_eligible(draft: dict[str, Any]) -> dict[str, Any] | None:
-    """Build export ticket if entry_family is exportable. Returns None otherwise."""
+def build_export_ticket_if_eligible(
+    draft: dict[str, Any]
+) -> tuple[dict[str, Any] | None, list[str]]:
+    """Build export ticket if entry_family is exportable. Returns (ticket, errors)."""
     entry_family = draft.get("entry_family", "")
     if entry_family not in DEFAULT_EXPORTABLE_FAMILIES:
-        return None
+        return None, [f"Draft entry_family '{entry_family}' is not exportable."]
 
     ticket_id = sanitize_identifier(draft["id"].replace("pivot_", "edge_"))
     hypothesis_type = str(draft.get("hypothesis_type", "unknown"))
@@ -718,9 +720,9 @@ def build_export_ticket_if_eligible(draft: dict[str, Any]) -> dict[str, Any] | N
     # Minimal validation
     errors = _validate_ticket_minimal(ticket)
     if errors:
-        return None
+        return None, errors
 
-    return ticket
+    return ticket, []
 
 
 def _validate_ticket_minimal(ticket: dict[str, Any]) -> list[str]:
@@ -810,14 +812,16 @@ def write_outputs(
 
         # Build ticket if exportable
         if is_exportable:
-            ticket = build_export_ticket_if_eligible(draft_with_meta)
+            ticket, ticket_errors = build_export_ticket_if_eligible(draft_with_meta)
             if ticket:
                 ticket_filename = f"ticket_{draft['id'].replace('pivot_', '')}_{timestamp_str}.yaml"
                 ticket_path = exportable_dir / ticket_filename
                 ticket_path.write_text(yaml.safe_dump(ticket, sort_keys=False, allow_unicode=True))
                 draft_entry["ticket_path"] = str(ticket_path.relative_to(output_dir))
             else:
-                errors.append(f"Ticket validation failed for {draft['id']}")
+                errors.append(
+                    f"Ticket validation failed for {draft['id']}: {'; '.join(ticket_errors)}"
+                )
 
         # Restore pivot_metadata
         draft["pivot_metadata"] = pivot_meta

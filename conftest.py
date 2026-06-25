@@ -15,7 +15,7 @@ directory to the front of ``sys.path``.
 import sys
 from pathlib import Path
 
-_SKILLS_MARKER = f"{Path.cwd()}/skills/"
+_SKILLS_MARKER = str(Path.cwd() / "skills")
 
 # Module basenames that exist in more than one skill's scripts/ directory.
 # Only these are evicted; unique names (e.g. analyze_single_stock) are kept.
@@ -26,6 +26,7 @@ _CONFLICTING_BASENAMES = frozenset(
         "helpers",  # 5 skills (test helpers)
         "report_generator",  # 11 skills
         "scorer",  # 10 skills
+        "yf_client",  # Multiple skills
     }
 )
 
@@ -70,7 +71,15 @@ def _activate_skill(skill: Path, test_dir: str) -> None:
         pass
     sys.path.insert(0, scripts_dir)
 
-    # 3. Ensure the test directory itself is on sys.path (some tests
+    # 3. Ensure the vcp-screener's scripts dir is on sys.path for tv_client
+    vcp_screener_scripts_dir = str(Path.cwd() / "skills" / "vcp-screener" / "scripts")
+    try:
+        sys.path.remove(vcp_screener_scripts_dir)
+    except ValueError:
+        pass
+    sys.path.append(vcp_screener_scripts_dir)
+
+    # 4. Ensure the test directory itself is on sys.path (some tests
     #    import helpers co-located with test files).
     try:
         sys.path.remove(test_dir)

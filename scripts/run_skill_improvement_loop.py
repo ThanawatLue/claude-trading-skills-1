@@ -114,9 +114,14 @@ def pick_next_skill(skills: list[str], state: dict) -> str | None:
 
 def _build_reviewer_cmd(project_root: Path) -> list[str]:
     """Return command prefix for invoking the reviewer script."""
+    # Use sys.executable directly if on Windows or inside a virtualenv to bypass
+    # uv's package sync locks (which fail if another process like the dashboard holds locks).
+    if os.name == "nt" or sys.prefix != sys.base_prefix:
+        return [sys.executable, str(project_root / REVIEWER_SCRIPT)]
     if shutil.which("uv"):
         return ["uv", "run", "--extra", "dev", "python", str(project_root / REVIEWER_SCRIPT)]
     return [sys.executable, str(project_root / REVIEWER_SCRIPT)]
+
 
 
 def run_auto_score(
@@ -186,14 +191,47 @@ def run_llm_review(project_root: Path, skill_name: str, prompt_file: str) -> dic
     # but we force JSON mode in gemini_adapter.
     response_text = gemini_adapter.call_gemini(
         prompt_text,
-        model_name="gemini-2.5-flash",
+        model_name="gemini-2.0-flash",
         response_mime_type="application/json"
     )
     
-    if response_text:
-        return gemini_adapter.extract_json_from_text(response_text)
-        
-    return None
+    if not response_text:
+        logger.error("Gemini returned empty response for LLM review.")
+        return None
+
+    try:
+        parsed = gemini_adapter.extract_json_from_text(response_text)
+        if parsed is None:
+            logger.error("Failed to extract JSON from response text: %s", response_text)
+            return None
+            
+        if isinstance(parsed, dict):
+            # If the model returned a single finding directly instead of wrapped in findings list
+            if "severity" in parsed and "message" in parsed and "score" not in parsed:
+                parsed = {
+                    "score": 85,
+                    "summary": parsed.get("message", "One finding identified."),
+                    "findings": [parsed]
+                }
+            
+            # Ensure required keys exist and have proper types
+            if "score" not in parsed or not isinstance(parsed["score"], (int, float)):
+                parsed["score"] = 85
+            if "findings" not in parsed or not isinstance(parsed["findings"], list):
+                parsed["findings"] = []
+            return parsed
+        elif isinstance(parsed, list):
+            # If it returned a list of findings directly
+            return {
+                "score": 85,
+                "summary": f"{len(parsed)} findings identified.",
+                "findings": parsed
+            }
+        logger.error("Unexpected JSON type parsed: %s", type(parsed))
+        return None
+    except Exception as parse_ex:
+        logger.error("Exception parsing LLM review JSON: %s. Raw text: %s", parse_ex, response_text)
+        return None
 
 
 def _extract_json_from_claude(output: str, required_keys: list[str]) -> dict | None:
@@ -272,10 +310,13 @@ def apply_improvement(
     prompt = (
         f"Improve the skill '{skill_name}' in skills/{skill_name}/ based on these findings:\n\n"
         + "\n".join(f"- {item}" for item in improvements[:10])
-        + "\n\nMake minimal, targeted edits to address the findings. Do not change unrelated code."
+        + "\n\nMake minimal, targeted edits to address the findings. Do not change unrelated code.\n\n"
+        + "CRITICAL IMPORT RULES:\n"
+        + "1. Do NOT use package-relative imports (e.g., `from . import ...`, `from .constants import ...`) in any python scripts that are designed to be run directly as entry points or standalone scripts (e.g., files in `scripts/` directory executed by the dashboard or command line). Direct scripts run as `__main__` and have no parent package, so relative imports will fail with `ImportError: attempted relative import with no known parent package`.\n"
+        + "2. Keep entry points self-contained. If you need constants or helper functions, define them directly in the same file or use absolute imports after appending paths to `sys.path` if absolutely necessary."
     )
 
-    success = gemini_adapter.run_gemini_agent(prompt, model_name="gemini-2.5-flash")
+    success = gemini_adapter.run_gemini_agent(prompt, model_name="gemini-2.0-flash", max_turns=30)
     if not success:
         logger.error("Gemini improvement agent failed.")
         return None

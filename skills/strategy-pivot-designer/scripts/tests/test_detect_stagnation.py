@@ -205,9 +205,14 @@ def test_overfitting_not_fires_robustness_high() -> None:
 # ---- Cost defeat tests ----
 
 
-def test_cost_defeat_fires_all_conditions(cost_defeat_history: dict) -> None:
-    latest_eval = cost_defeat_history["iterations"][-1]["eval"]
-    result = ds.detect_cost_defeat(latest_eval)
+def test_cost_defeat_fires_all_conditions() -> None:
+    ev = make_eval(
+        total_score=48,
+        expectancy=0.12,
+        profit_factor=1.15,
+        slippage_tested=True,
+    )
+    result = ds.detect_cost_defeat(ev)
     assert result is not None
     assert result["trigger"] == "cost_defeat"
     assert result["severity"] == "medium"
@@ -233,9 +238,9 @@ def test_cost_defeat_not_fires_high_expectancy() -> None:
 # ---- Tail risk tests ----
 
 
-def test_tail_risk_fires_high_drawdown(tail_risk_history: dict) -> None:
-    latest_eval = tail_risk_history["iterations"][-1]["eval"]
-    result = ds.detect_tail_risk(latest_eval)
+def test_tail_risk_fires_high_drawdown() -> None:
+    ev = make_eval(total_score=50, max_drawdown_pct=42.0)
+    result = ds.detect_tail_risk(ev)
     assert result is not None
     assert result["trigger"] == "tail_risk"
     assert result["severity"] == "high"
@@ -251,10 +256,13 @@ def test_tail_risk_fires_low_risk_mgmt_score() -> None:
     assert "Risk Management score=4" in result["message"]
 
 
-def test_tail_risk_fires_on_single_iteration(tail_risk_history: dict) -> None:
+def test_tail_risk_fires_on_single_iteration() -> None:
     """Tail risk can fire on a history with only 1 iteration."""
-    assert len(tail_risk_history["iterations"]) == 1
-    result = ds.run_all_triggers(tail_risk_history)
+    history = {
+        "strategy_id": "test_strat",
+        "iterations": [make_iteration(1, make_eval(total_score=50, max_drawdown_pct=40.0))],
+    }
+    result = ds.run_all_triggers(history)
     triggers = [t["trigger"] for t in result["triggers_fired"]]
     assert "tail_risk" in triggers
 
@@ -396,3 +404,150 @@ def test_main_corrupt_history_returns_error(
         ["detect_stagnation.py", "--history", str(history_path), "--output-dir", str(tmp_path)],
     )
     assert ds.main() == 1
+
+
+# ---------------------------------------------------------------------------
+# Recommendation determination tests
+# ---------------------------------------------------------------------------
+
+
+class TestDetermineRecommendation:
+    def test_abandon_condition_met(self):
+        # iterations >= 3, latest score < 30, last-3 monotonically non-increasing.
+        triggers = []
+        score_trajectory = [50, 40, 28, 25, 22]
+        iteration_count = len(score_trajectory)
+        assert ds._determine_recommendation(triggers, score_trajectory, iteration_count) == "abandon"
+
+    def test_abandon_condition_not_met_score_too_high(self):
+        # latest score >= 30
+        triggers = []
+        score_trajectory = [50, 40, 32, 31, 30]
+        iteration_count = len(score_trajectory)
+        assert ds._determine_recommendation(triggers, score_trajectory, iteration_count) == "continue"
+
+    def test_abandon_condition_not_met_not_enough_iterations(self):
+        # iteration_count < 3
+        triggers = []
+        score_trajectory = [28, 25]
+        iteration_count = len(score_trajectory)
+        assert ds._determine_recommendation(triggers, score_trajectory, iteration_count) == "continue"
+
+    def test_abandon_condition_not_met_not_monotonic(self):
+        # last-3 not monotonically non-increasing
+        triggers = []
+        score_trajectory = [50, 20, 25, 18] # last 3: 20, 25, 18 (not monotonic)
+        iteration_count = len(score_trajectory)
+        assert ds._determine_recommendation(triggers, score_trajectory, iteration_count) == "continue"
+        
+        score_trajectory_2 = [50, 40, 28, 29, 22] # last 3: 28, 29, 22 (not monotonic)
+        iteration_count_2 = len(score_trajectory_2)
+        assert ds._determine_recommendation(triggers, score_trajectory_2, iteration_count_2) == "continue"
+
+
+    def test_pivot_condition_met(self):
+        # at least one trigger fired, and abandon condition is not met
+        triggers = [{"trigger": "plateau"}]
+        score_trajectory = [50, 60, 70]
+        iteration_count = len(score_trajectory)
+        assert ds._determine_recommendation(triggers, score_trajectory, iteration_count) == "pivot"
+
+    def test_continue_condition_met(self):
+        # No triggers fired, and abandon condition is not met
+        triggers = []
+        score_trajectory = [50, 60, 70]
+        iteration_count = len(score_trajectory)
+        assert ds._determine_recommendation(triggers, score_trajectory, iteration_count) == "continue"
+
+
+# ---------------------------------------------------------------------------
+# CLI Integration Tests
+# ---------------------------------------------------------------------------
+
+
+class TestCliIntegration:
+    @pytest.fixture(autouse=True)
+    def setup(self, tmp_path, monkeypatch):
+        self.tmp_path = tmp_path
+        self.history_path = tmp_path / "history.json"
+        self.output_dir = tmp_path / "output"
+        self.output_dir.mkdir()
+        self.monkeypatch = monkeypatch
+        self.monkeypatch.setattr("sys.stdout", open(os.devnull, "w"))  # Suppress stdout
+
+    def _create_history_file(self, content):
+        with open(self.history_path, "w") as f:
+            json.dump(content, f)
+
+    def _run_main(self, args):
+        self.monkeypatch.setattr(
+            "sys.argv", ["detect_stagnation.py", "--history", str(self.history_path)] + args
+        )
+        try:
+            return ds.main()
+        finally:
+            self.monkeypatch.undo() # Clean up the monkeypatch
+
+    def test_main_missing_history_file_returns_error(self):
+        # Don't create history_path
+        exit_code = self._run_main([])
+        assert exit_code == 1
+
+    def test_main_healthy_history_returns_zero_and_continues(self):
+        history_content = {
+            "strategy_id": "test_strat",
+            "iterations": [
+                make_iteration(1, make_eval(total_score=80)),
+                make_iteration(2, make_eval(total_score=85)),
+            ],
+        }
+        self._create_history_file(history_content)
+        exit_code = self._run_main(["--output-dir", str(self.output_dir)])
+        assert exit_code == 0
+        # No diagnosis file should be created for 'continue'
+        assert not any(f.name.startswith("pivot_diagnosis") for f in self.output_dir.iterdir())
+
+    def test_main_stagnation_detected_returns_zero_and_creates_diagnosis(self):
+        history_content = {
+            "strategy_id": "test_strat_stagnant",
+            "iterations": [
+                make_iteration(1, make_eval(total_score=80)),
+                make_iteration(2, make_eval(total_score=75)),
+                make_iteration(3, make_eval(total_score=72)),
+                make_iteration(4, make_eval(total_score=73)),
+                make_iteration(5, make_eval(total_score=72, max_drawdown_pct=40.0)),
+            ],
+        }
+        self._create_history_file(history_content)
+        exit_code = self._run_main(["--output-dir", str(self.output_dir)])
+        assert exit_code == 0
+        diagnosis_files = list(self.output_dir.glob("pivot_diagnosis_*.json"))
+        assert len(diagnosis_files) == 1
+        with open(diagnosis_files[0], "r") as f:
+            diagnosis = json.load(f)
+        assert diagnosis["stagnation_detected"] is True
+        assert diagnosis["recommendation"] == "pivot"
+        assert any(t["trigger"] == "tail_risk" for t in diagnosis["triggers_fired"])
+        assert any(t["trigger"] == "improvement_plateau" for t in diagnosis["triggers_fired"])
+
+    def test_main_abandon_detected_returns_zero_and_creates_diagnosis(self):
+        history_content = {
+            "strategy_id": "test_strat_abandon",
+            "iterations": [
+                make_iteration(1, make_eval(total_score=50)),
+                make_iteration(2, make_eval(total_score=30)),
+                make_iteration(3, make_eval(total_score=28)),
+                make_iteration(4, make_eval(total_score=25)),
+                make_iteration(5, make_eval(total_score=22)),
+            ],
+        }
+        self._create_history_file(history_content)
+        exit_code = self._run_main(["--output-dir", str(self.output_dir)])
+        assert exit_code == 0
+        diagnosis_files = list(self.output_dir.glob("pivot_diagnosis_*.json"))
+        assert len(diagnosis_files) == 1
+        with open(diagnosis_files[0], "r") as f:
+            diagnosis = json.load(f)
+        assert diagnosis["stagnation_detected"] is True
+        assert diagnosis["recommendation"] == "abandon"
+

@@ -354,7 +354,6 @@ class TestMain:
     def test_generates_pages(self, tmp_skill, tmp_claude_md):
         docs_dir = tmp_skill / "docs"
         (docs_dir / "en" / "skills").mkdir(parents=True)
-        (docs_dir / "ja" / "skills").mkdir(parents=True)
 
         result = main(
             [
@@ -368,7 +367,6 @@ class TestMain:
         )
         assert result == 0
         assert (docs_dir / "en" / "skills" / "test-skill.md").exists()
-        assert (docs_dir / "ja" / "skills" / "test-skill.md").exists()
 
     def test_skips_hand_written(self, tmp_skill, tmp_claude_md):
         # Create a skill that matches HAND_WRITTEN
@@ -417,14 +415,9 @@ class TestMain:
     def test_main_updates_index(self, tmp_skill, tmp_claude_md):
         docs_dir = tmp_skill / "docs"
         en_index = docs_dir / "en" / "skills" / "index.md"
-        ja_index = docs_dir / "ja" / "skills" / "index.md"
         en_index.parent.mkdir(parents=True)
-        ja_index.parent.mkdir(parents=True)
         en_index.write_text(
             "## Guides\n\n| Skill | Desc | API |\n|---|---|---|\n| old | old | old |\n\nFooter\n"
-        )
-        ja_index.write_text(
-            "## ガイド\n\n| スキル | 概要 | API |\n|---|---|---|\n| old | old | old |\n\nFooter\n"
         )
 
         main(
@@ -441,9 +434,6 @@ class TestMain:
         assert "Test Skill" in en_content
         assert "old | old" not in en_content
         assert "Footer" in en_content
-
-        ja_content = ja_index.read_text()
-        assert "Test Skill" in ja_content
 
     def test_skips_dir_without_skill_md(self, tmp_skill, tmp_claude_md):
         # Create a directory without SKILL.md
@@ -806,31 +796,7 @@ class TestUpdateCatalogApiMatrix:
         # Should still have exactly one "Existing Skill" row
         assert content.count("Existing Skill") == 1
 
-    def test_ja_inserts_before_aggregate_row(self, tmp_path):
-        docs_dir = tmp_path / "docs"
-        catalog = self._make_ja_catalog(docs_dir)
 
-        all_skills = [
-            (
-                "new-skill",
-                {"frontmatter": {"name": "new-skill", "description": "A new skill"}},
-                {"fmp": "✅ Required", "finviz": "❌ Not used", "alpaca": "❌ Not used"},
-            ),
-        ]
-        update_catalog_api_matrix(docs_dir, all_skills)
-        content = catalog.read_text()
-        lines = content.splitlines()
-        # Find "New Skill" and "その他すべてのスキル"
-        new_idx = None
-        agg_idx = None
-        for i, line in enumerate(lines):
-            if "New Skill" in line:
-                new_idx = i
-            if "その他すべてのスキル" in line:
-                agg_idx = i
-        assert new_idx is not None, "New Skill row not found"
-        assert agg_idx is not None, "Aggregate row not found"
-        assert new_idx < agg_idx, "New skill should appear before aggregate row"
 
     def test_skill_in_category_but_not_in_matrix_gets_added(self, tmp_path):
         """A skill linked in a category table but missing from matrix should be added."""
@@ -869,18 +835,4 @@ class TestUpdateCatalogApiMatrix:
         # my-skill is in category table but NOT in matrix — should be added to matrix
         assert content.count("My Skill") == 2  # once in category, once in matrix
 
-    def test_ja_skips_all_dash_skill(self, tmp_path):
-        docs_dir = tmp_path / "docs"
-        catalog = self._make_ja_catalog(docs_dir)
 
-        all_skills = [
-            (
-                "free-skill",
-                {"frontmatter": {"name": "free-skill", "description": "No API needed"}},
-                {"fmp": "❌ Not required", "finviz": "❌ Not used", "alpaca": "❌ Not used"},
-            ),
-        ]
-        update_catalog_api_matrix(docs_dir, all_skills)
-        content = catalog.read_text()
-        # free-skill should not be added to JA because all values are "-"
-        assert "Free Skill" not in content

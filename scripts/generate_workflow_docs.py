@@ -378,9 +378,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--lang",
-        choices=["en", "ja", "all"],
-        default="all",
-        help="Which language to generate (default: all)",
+        choices=["en"],
+        default="en",
+        help="Which language to generate (default: en)",
     )
     parser.add_argument(
         "--output",
@@ -409,7 +409,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERROR: no workflow manifests found under {workflows_dir}", file=sys.stderr)
         return 1
 
-    langs = ["en"] if args.lang == "all" else [args.lang]
+    langs = [args.lang]
     drift = False
 
     for lang in langs:

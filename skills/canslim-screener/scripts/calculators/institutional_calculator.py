@@ -94,8 +94,10 @@ def calculate_institutional_sponsorship(
         >>> result = calculate_institutional_sponsorship(holders, profile)
         >>> print(f"I Score: {result['score']}, Holders: {result['num_holders']}, Ownership: {result['ownership_pct']:.1f}%")
     """
+    has_inst_pct = profile and (profile.get("institutionPercent") is not None or profile.get("percentInstitutions") is not None)
+
     # Validate input
-    if not institutional_holders:
+    if not institutional_holders and not has_inst_pct:
         return {
             "score": 0,
             "error": "No institutional holder data available",
@@ -109,21 +111,22 @@ def calculate_institutional_sponsorship(
         }
 
     # Count institutional holders
-    num_holders = len(institutional_holders)
+    num_holders = len(institutional_holders) if institutional_holders else 0
 
     # Check for superinvestors
     superinvestors_found = []
-    for holder_entry in institutional_holders:
-        holder_name = holder_entry.get("holder", "").upper()
-        for superinvestor in SUPERINVESTORS:
-            if superinvestor in holder_name:
-                superinvestors_found.append(holder_entry.get("holder"))
-                break
+    if institutional_holders:
+        for holder_entry in institutional_holders:
+            holder_name = holder_entry.get("holder", "").upper()
+            for superinvestor in SUPERINVESTORS:
+                if superinvestor in holder_name:
+                    superinvestors_found.append(holder_entry.get("holder"))
+                    break
 
     superinvestor_present = len(superinvestors_found) > 0
 
     # Calculate total shares held by institutions
-    total_shares_held = sum(holder.get("shares", 0) for holder in institutional_holders)
+    total_shares_held = sum(holder.get("shares", 0) for holder in institutional_holders) if institutional_holders else 0
 
     # Calculate ownership percentage (requires shares outstanding from profile)
     ownership_pct = None
@@ -132,20 +135,26 @@ def calculate_institutional_sponsorship(
     data_source = "FMP"  # Track data source
 
     if profile:
-        # Try to get shares outstanding (different field names possible)
-        shares_outstanding = profile.get("sharesOutstanding")
+        # Check if institutionPercent was patched in
+        ownership_pct = profile.get("institutionPercent") or profile.get("percentInstitutions")
 
-        # Fallback: calculate from market cap and price
-        if not shares_outstanding:
-            market_cap = profile.get("mktCap") or profile.get("marketCap")
-            price = profile.get("price")
-            if market_cap and price and price > 0:
-                shares_outstanding = market_cap / price
+        if ownership_pct is None:
+            # Try to get shares outstanding (different field names possible)
+            shares_outstanding = profile.get("sharesOutstanding")
 
-        if shares_outstanding and shares_outstanding > 0:
-            ownership_pct = (total_shares_held / shares_outstanding) * 100
+            # Fallback: calculate from market cap and price
+            if not shares_outstanding:
+                market_cap = profile.get("mktCap") or profile.get("marketCap")
+                price = profile.get("price")
+                if market_cap and price and price > 0:
+                    shares_outstanding = market_cap / price
+
+            if shares_outstanding and shares_outstanding > 0:
+                ownership_pct = (total_shares_held / shares_outstanding) * 100
+            else:
+                quality_warning = "Shares outstanding unavailable from FMP."
         else:
-            quality_warning = "Shares outstanding unavailable from FMP."
+            data_source = "Yahoo Finance" if symbol and symbol.endswith(".BK") else "Profile"
     else:
         quality_warning = "Company profile not provided."
 
@@ -196,7 +205,7 @@ def calculate_institutional_sponsorship(
         "shares_outstanding": shares_outstanding,
         "interpretation": interpretation,
         "quality_warning": quality_warning,
-        "data_source": data_source,  # "FMP" or "Finviz"
+        "data_source": data_source,  # "FMP", "Yahoo Finance" or "Finviz"
     }
 
 
@@ -208,16 +217,18 @@ def score_institutional_sponsorship(
 ) -> int:
     """
     Score institutional sponsorship based on O'Neil's criteria
-
-    Args:
-        num_holders: Number of institutional holders
-        ownership_pct: Institutional ownership percentage (None if unavailable)
-        superinvestor_present: True if superinvestor detected
-        quality_warning: Data quality warning
-
-    Returns:
-        int: Score from 0-100
     """
+    # If ownership % is valid but holder list is empty (common for international markets)
+    if num_holders == 0 and ownership_pct is not None and ownership_pct > 0:
+        if 15 <= ownership_pct <= 60:
+            return 85
+        elif 5 <= ownership_pct < 15:
+            return 70
+        elif ownership_pct > 60:
+            return 60  # overcrowded/high concentration
+        else:
+            return 40  # underowned
+
     # If ownership % unavailable, score on holder count only (reduced scale)
     if ownership_pct is None:
         if num_holders >= 50 and num_holders <= 100:
@@ -280,18 +291,11 @@ def interpret_institutional_sponsorship(
 ) -> str:
     """
     Generate human-readable interpretation
-
-    Args:
-        num_holders: Number of institutional holders
-        ownership_pct: Institutional ownership percentage
-        superinvestor_present: True if superinvestor detected
-        superinvestors: List of superinvestor names
-
-    Returns:
-        str: Interpretation string
     """
     # Holder count assessment
-    if 50 <= num_holders <= 100:
+    if num_holders == 0 and ownership_pct is not None and ownership_pct > 0:
+        holder_msg = "Holders list unavailable (international ticker)"
+    elif 50 <= num_holders <= 100:
         holder_msg = f"{num_holders} holders (O'Neil's sweet spot)"
     elif 30 <= num_holders < 50:
         holder_msg = f"{num_holders} holders (good, but could grow)"

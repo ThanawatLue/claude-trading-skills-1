@@ -33,14 +33,122 @@ def _get_client():
     return client, genai
 
 
+def _call_generate_content_with_retry(
+    client,
+    model: str,
+    contents,
+    config,
+    max_retries: int = 5,
+    initial_delay: float = 5.0,
+):
+    """Call generate_content with retry logic on transient errors."""
+    import time
+    delay = initial_delay
+    for attempt in range(max_retries):
+        try:
+            return client.models.generate_content(
+                model=model,
+                contents=contents,
+                config=config,
+            )
+        except Exception as e:
+            err_msg = str(e)
+            is_transient = (
+                "503" in err_msg
+                or "UNAVAILABLE" in err_msg
+                or "429" in err_msg
+                or "RESOURCE_EXHAUSTED" in err_msg
+            )
+            if is_transient and attempt < max_retries - 1:
+                sleep_time = delay
+                is_429 = "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg
+                if is_429:
+                    match = re.search(r"Please retry in (\d+(?:\.\d+)?)s", err_msg, re.IGNORECASE)
+                    if match:
+                        sleep_time = float(match.group(1)) + 2.0  # 2s safety buffer
+                    else:
+                        match_delay = re.search(r"retryDelay':\s*'(\d+)s'", err_msg)
+                        if match_delay:
+                            sleep_time = float(match_delay.group(1)) + 2.0
+                        else:
+                            sleep_time = 62.0  # safe default for 429
+                
+                logger.warning(
+                    "Gemini API returned transient error (attempt %d/%d): %s. Retrying in %.1f seconds...",
+                    attempt + 1,
+                    max_retries,
+                    err_msg,
+                    sleep_time,
+                )
+                time.sleep(sleep_time)
+                delay *= 2.0
+            else:
+                raise e
+
+
 def call_gemini(
     prompt: str,
-    model_name: str = "gemini-2.5-flash",
+    model_name: str = "gemini-2.0-flash",
     temperature: float = 0.2,
     max_output_tokens: int = 8192,
     response_mime_type: str = "text/plain",
 ) -> str | None:
-    """Call Gemini API and return the text response."""
+    """Call Gemini CLI (or fall back to Gemini API via SDK) and return the text response."""
+    import subprocess
+    import shutil
+
+    gemini_path = shutil.which("gemini")
+    if gemini_path:
+        import uuid
+        import os
+        session_id = str(uuid.uuid4())
+        js_path = os.path.join(os.path.dirname(gemini_path), "node_modules", "@google", "gemini-cli", "bundle", "gemini.js")
+        if os.path.exists(js_path):
+            cmd = ["node", js_path, "-o", "json", "--skip-trust", "--session-id", session_id]
+            use_shell = False
+        else:
+            cmd = [gemini_path, "-o", "json", "--skip-trust", "--session-id", session_id]
+            use_shell = True if os.name == "nt" else False
+            
+        if model_name:
+            cmd.extend(["-m", model_name])
+            
+        try:
+            logger.info("Calling gemini CLI for prompt...")
+            env = os.environ.copy()
+            for k in list(env.keys()):
+                if k.startswith("ANTIGRAVITY_"):
+                    env.pop(k)
+            result = subprocess.run(
+                cmd,
+                input=prompt,
+                capture_output=True,
+                text=True,
+                check=False,
+                encoding="utf-8",
+                shell=use_shell,
+                env=env
+            )
+            if result.returncode == 0:
+                output_text = result.stdout
+                pos = output_text.find("{")
+                if pos != -1:
+                    json_text = output_text[pos:]
+                    try:
+                        data = json.loads(json_text)
+                        response = data.get("response")
+                        if response:
+                            return response
+                    except json.JSONDecodeError:
+                        pass
+                if output_text.strip():
+                    return output_text.strip()
+            else:
+                logger.warning("Gemini CLI returned non-zero code (%d): %s. Falling back to SDK...", result.returncode, result.stderr)
+        except Exception as e:
+            logger.warning("Failed to call gemini CLI: %s. Falling back to SDK...", e)
+
+    # 2. Fallback to google-genai SDK
     client, genai = _get_client()
     if client is None:
         return None
@@ -49,11 +157,30 @@ def call_gemini(
         config_kwargs: dict[str, Any] = {
             "temperature": temperature,
             "max_output_tokens": max_output_tokens,
+            "safety_settings": [
+                genai.types.SafetySetting(
+                    category=genai.types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                    threshold=genai.types.HarmBlockThreshold.BLOCK_NONE,
+                ),
+                genai.types.SafetySetting(
+                    category=genai.types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                    threshold=genai.types.HarmBlockThreshold.BLOCK_NONE,
+                ),
+                genai.types.SafetySetting(
+                    category=genai.types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                    threshold=genai.types.HarmBlockThreshold.BLOCK_NONE,
+                ),
+                genai.types.SafetySetting(
+                    category=genai.types.HarmCategory.HARM_CATEGORY_HARASSMENT,
+                    threshold=genai.types.HarmBlockThreshold.BLOCK_NONE,
+                ),
+            ],
         }
         if response_mime_type == "application/json":
             config_kwargs["response_mime_type"] = "application/json"
 
-        response = client.models.generate_content(
+        response = _call_generate_content_with_retry(
+            client=client,
             model=model_name,
             contents=prompt,
             config=genai.types.GenerateContentConfig(**config_kwargs),
@@ -68,6 +195,7 @@ def call_gemini(
     except Exception as e:
         logger.error("Error calling Gemini API: %s", e)
         return None
+
 
 
 # ── File Tool Implementations ─────────────────────────────────────────────────
@@ -135,16 +263,54 @@ _TOOL_MAP = {
 
 def run_gemini_agent(
     prompt: str,
-    model_name: str = "gemini-2.5-flash",
+    model_name: str = "gemini-2.0-flash",
     max_turns: int = 10,
 ) -> bool:
-    """Run a Gemini agentic loop with file tools.
+    """Run a Gemini agentic loop via the gemini CLI (or fall back to Python SDK)."""
+    import subprocess
+    import shutil
 
-    The agent can call read_file, write_file, list_files, grep_search
-    in a loop until it produces a final text response.
+    gemini_path = shutil.which("gemini")
+    if gemini_path:
+        import uuid
+        import os
+        session_id = str(uuid.uuid4())
+        js_path = os.path.join(os.path.dirname(gemini_path), "node_modules", "@google", "gemini-cli", "bundle", "gemini.js")
+        if os.path.exists(js_path):
+            cmd = ["node", js_path, "--approval-mode", "yolo", "-o", "json", "--skip-trust", "--session-id", session_id]
+            use_shell = False
+        else:
+            cmd = [gemini_path, "--approval-mode", "yolo", "-o", "json", "--skip-trust", "--session-id", session_id]
+            use_shell = True if os.name == "nt" else False
+            
+        if model_name:
+            cmd.extend(["-m", model_name])
+            
+        try:
+            logger.info("Spawning gemini CLI in YOLO mode...")
+            env = os.environ.copy()
+            for k in list(env.keys()):
+                if k.startswith("ANTIGRAVITY_"):
+                    env.pop(k)
+            result = subprocess.run(
+                cmd,
+                input=prompt,
+                capture_output=True,
+                text=True,
+                check=False,
+                encoding="utf-8",
+                shell=use_shell,
+                env=env
+            )
+            if result.returncode == 0:
+                logger.info("Gemini CLI agent completed successfully.")
+                return True
+            else:
+                logger.warning("Gemini CLI agent returned non-zero code (%d): %s. Falling back to SDK...", result.returncode, result.stderr)
+        except Exception as e:
+            logger.warning("Failed to call gemini CLI agent: %s. Falling back to SDK...", e)
 
-    Returns True if the agent produced a final response, False on error.
-    """
+    # 2. Fallback to google-genai SDK
     client, genai = _get_client()
     if client is None:
         return False
@@ -208,19 +374,42 @@ def run_gemini_agent(
                 logger.info("Rate limit safety: sleeping 6.5 seconds before turn %d...", turn + 1)
                 time.sleep(6.5)
 
-            response = client.models.generate_content(
+            response = _call_generate_content_with_retry(
+                client=client,
                 model=model_name,
                 contents=contents,
                 config=genai.types.GenerateContentConfig(
                     tools=tools,
                     temperature=0.2,
                     max_output_tokens=8192,
+                    safety_settings=[
+                        genai.types.SafetySetting(
+                            category=genai.types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                            threshold=genai.types.HarmBlockThreshold.BLOCK_NONE,
+                        ),
+                        genai.types.SafetySetting(
+                            category=genai.types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                            threshold=genai.types.HarmBlockThreshold.BLOCK_NONE,
+                        ),
+                        genai.types.SafetySetting(
+                            category=genai.types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                            threshold=genai.types.HarmBlockThreshold.BLOCK_NONE,
+                        ),
+                        genai.types.SafetySetting(
+                            category=genai.types.HarmCategory.HARM_CATEGORY_HARASSMENT,
+                            threshold=genai.types.HarmBlockThreshold.BLOCK_NONE,
+                        ),
+                    ],
                 ),
             )
 
             candidate = response.candidates[0] if response.candidates else None
             if candidate is None:
                 logger.error("Gemini agent: no candidate in response.")
+                return False
+
+            if not candidate.content or not hasattr(candidate.content, "parts"):
+                logger.error("Gemini agent: candidate content is None or has no parts.")
                 return False
 
             # Check if we have tool calls
@@ -237,13 +426,14 @@ def run_gemini_agent(
 
             # Execute each tool call and feed results back
             tool_results = []
+            logger.info("Gemini agent requested tool calls: %s", [(fc.name, dict(fc.args)) for fc in tool_calls])
             for fc in tool_calls:
                 fn = _TOOL_MAP.get(fc.name)
                 if fn:
                     result = fn(**dict(fc.args))
                 else:
                     result = f"Unknown tool: {fc.name}"
-                logger.debug("Tool %s → %s chars", fc.name, len(str(result)))
+                logger.info("Tool %s completed. Output length: %s chars", fc.name, len(str(result)))
                 tool_results.append(
                     {
                         "function_response": {

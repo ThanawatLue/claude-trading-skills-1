@@ -158,7 +158,7 @@ The script saves two files to the current working directory (or `--output-dir` i
 
 **Dividend Growth Analysis:**
 - 3-Year Dividend CAGR ≥ 12% (doubles dividend in 6 years)
-- Dividend Consistency: No cuts in past 4 years
+- Dividend Consistency: No significant cuts (max 5% annual decrease) in past 4 years
 - Payout Ratio < 100% (sustainability check)
 
 **Financial Health:**
@@ -213,6 +213,17 @@ Stocks ranked by composite score. Top scorers combine exceptional dividend growt
 - Lowest risk of further decline
 - Recommended: Conservative entry for high conviction stocks
 - Entry: Full position, tight stop loss 3-5% below
+
+### Stop Loss Suggestion Heuristic
+
+The Markdown report includes a "Stop Loss Suggestion" based on the formula: `((stock['rsi'] - 30) / 2 + 3)% below entry`. This heuristic is an opinionated design choice to provide a dynamic stop loss target that adjusts based on the stock's current RSI level.
+
+-   **Logic:** As RSI decreases (indicating more oversold conditions), the suggested stop loss percentage below entry increases. This reflects a recognition that more oversold stocks might experience deeper temporary pullbacks before recovery, thus requiring a slightly wider stop to avoid being shaken out.
+-   **Example:**
+    -   If RSI is 35 (early pullback), the suggestion is `((35 - 30) / 2 + 3)% = (5 / 2 + 3)% = 2.5 + 3 = 5.5%` below entry.
+    -   If RSI is 30 (strong oversold), the suggestion is `((30 - 30) / 2 + 3)% = (0 / 2 + 3)% = 0 + 3 = 3%` below entry.
+
+This provides a starting point for managing risk, but investors should adjust based on their individual risk tolerance and further technical analysis.
 
 ### Dividend Growth Compounding Examples
 

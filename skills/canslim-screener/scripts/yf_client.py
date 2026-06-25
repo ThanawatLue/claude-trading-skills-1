@@ -56,6 +56,9 @@ def _yf_download(symbol: str, days: int) -> pd.DataFrame:
             bars = _cache.get_bars(symbol, days)
             if len(bars) >= days // 2:
                 df = pd.DataFrame(bars)
+                # Drop rows where 'close' is NaN (legacy or cache corruptions)
+                if not df.empty and "close" in df.columns:
+                    df = df.dropna(subset=["close"])
                 df["Date"] = pd.to_datetime(df["date"])
                 df = df.set_index("Date").sort_index()
                 df.rename(columns={"open": "Open", "high": "High", "low": "Low",
@@ -70,16 +73,23 @@ def _yf_download(symbol: str, days: int) -> pd.DataFrame:
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = [c[0] for c in df.columns]
 
+    # Drop rows where 'Close' is NaN from downloaded yfinance data
+    if not df.empty and "Close" in df.columns:
+        df = df.dropna(subset=["Close"])
+
     # Save to cache
     if _CACHE_OK and _cache and not df.empty:
         bars = []
         for dt, row in df.iterrows():
+            close_val = row.get("Close", 0)
+            if pd.isna(close_val):
+                continue
             bars.append({
                 "date": dt.strftime("%Y-%m-%d"),
                 "open": float(row.get("Open", 0)),
                 "high": float(row.get("High", 0)),
                 "low": float(row.get("Low", 0)),
-                "close": float(row.get("Close", 0)),
+                "close": float(close_val),
                 "volume": int(row.get("Volume", 0)),
             })
         _cache.upsert_bars(symbol, bars)
@@ -164,6 +174,14 @@ class YFClient:
             if stmt is None or stmt.empty:
                 return None
 
+            # Get current shares outstanding as fallback
+            fallback_shares = None
+            try:
+                info = t.info
+                fallback_shares = info.get("sharesOutstanding") or getattr(t.fast_info, "shares", None)
+            except Exception:
+                pass
+
             # yfinance: rows = line items, columns = dates (newest first)
             results = []
             for col in stmt.columns[:limit]:
@@ -186,6 +204,9 @@ class YFClient:
                 # Shares outstanding for EPS fallback
                 if basic_eps is None and net_income is not None:
                     shares = _get(["Basic Average Shares", "Diluted Average Shares"])
+                    if not shares or shares <= 0:
+                        shares = fallback_shares
+
                     if shares and shares > 0:
                         basic_eps = net_income / shares
                         diluted_eps = basic_eps
@@ -210,17 +231,20 @@ class YFClient:
         """Return {"historical": [{date, close, open, high, low, volume}]} (newest first)."""
         try:
             df = _yf_download(symbol, days)
-            if df.empty:
+            if df is None or df.empty:
                 return None
 
             historical = []
             for dt, row in df.iloc[::-1].iterrows():  # newest first
+                close_val = row.get("Close", 0)
+                if pd.isna(close_val):
+                    continue
                 historical.append({
                     "date": dt.strftime("%Y-%m-%d"),
                     "open": round(float(row.get("Open", 0)), 4),
                     "high": round(float(row.get("High", 0)), 4),
                     "low": round(float(row.get("Low", 0)), 4),
-                    "close": round(float(row.get("Close", 0)), 4),
+                    "close": round(float(close_val), 4),
                     "volume": int(row.get("Volume", 0)),
                 })
             return {"historical": historical}
@@ -305,3 +329,31 @@ class YFClient:
         except Exception as e:
             print(f"Warning: could not fetch S&P 500 list: {e}", file=sys.stderr)
             return None
+
+    def get_thai_constituents(self) -> Optional[list[dict]]:
+        """Return Thai growth/momentum candidates (SET100 + MAI growth)."""
+        growth_symbols = [
+            # Technology & Electronics
+            "DELTA", "HANA", "KCE", "CCET", "SIS", "SYNEX", "ADVICE",
+            # Commerce & Retail
+            "CPALL", "CPAXT", "COM7", "MOSHI", "AU", "SINGER", "BEAUTY",
+            # Food & Beverage (Exporters/Brands)
+            "SAPPE", "ICHI", "COCOCO", "MALEE", "PLUS", "KCG", "BTG", "CBG", "OSP",
+            # Finance & Leasing
+            "MTC", "SAWAD", "TIDLOR", "AEONTS", "JMT", "BAM",
+            # Industrials & Logistics
+            "WHA", "AMATA", "SJWD", "III", "MENA",
+            # Healthcare & Esthetics
+            "BDMS", "BH", "PR9", "MASTER", "CHG",
+            # Energy & Utilities
+            "GULF", "GPSC", "BGRIM", "EA",
+            # Mid-caps & Tourism recovery
+            "SIRI", "AP", "SPALI", "DOHOME", "GLOBAL", "MEGA", "PLANB",
+            "AOT", "MINT", "CENTEL", "ERW", "SPA", "TRUE"
+        ]
+        constituents = [
+            {"symbol": f"{sym}.BK", "name": sym, "sector": "Thai Growth", "subSector": "Thai Stock"}
+            for sym in growth_symbols
+        ]
+        print(f"  (Thai Growth Universe: {len(constituents)} stocks)", flush=True)
+        return constituents

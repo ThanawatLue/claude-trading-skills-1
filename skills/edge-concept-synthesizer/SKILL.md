@@ -44,30 +44,36 @@ This skill clusters ticket evidence, summarizes recurring conditions, and output
 
 ```bash
 python3 skills/edge-concept-synthesizer/scripts/synthesize_edge_concepts.py \
-  --tickets-dir /tmp/edge-auto/tickets \
-  --hints /tmp/edge-hints/hints.yaml \
-  --output /tmp/edge-concepts/edge_concepts.yaml \
+  --tickets-dir data/edge-auto/tickets \
+  --hints data/edge-hints/hints.yaml \
+  --output reports/edge-concepts/edge_concepts.yaml \
   --min-ticket-support 2
 
 # With hint promotion and synthetic cap
 python3 skills/edge-concept-synthesizer/scripts/synthesize_edge_concepts.py \
-  --tickets-dir /tmp/edge-auto/tickets \
-  --hints /tmp/edge-hints/hints.yaml \
-  --output /tmp/edge-concepts/edge_concepts.yaml \
+  --tickets-dir data/edge-auto/tickets \
+  --hints data/edge-hints/hints.yaml \
+  --output reports/edge-concepts/edge_concepts.yaml \
   --promote-hints \
   --max-synthetic-ratio 1.5
 
 # With custom dedup threshold (or disable dedup)
 python3 skills/edge-concept-synthesizer/scripts/synthesize_edge_concepts.py \
-  --tickets-dir /tmp/edge-auto/tickets \
-  --output /tmp/edge-concepts/edge_concepts.yaml \
+  --tickets-dir data/edge-auto/tickets \
+  --output reports/edge-concepts/edge_concepts.yaml \
   --overlap-threshold 0.6
 
 python3 skills/edge-concept-synthesizer/scripts/synthesize_edge_concepts.py \
-  --tickets-dir /tmp/edge-auto/tickets \
-  --output /tmp/edge-concepts/edge_concepts.yaml \
+  --tickets-dir data/edge-auto/tickets \
+  --output reports/edge-concepts/edge_concepts.yaml \
   --no-dedup
 ```
+
+## Troubleshooting
+
+- **Missing Directories**: The `--tickets-dir` must exist before running. If the directory is missing, the script will log an error and exit with code 1. The output path's parent directories will be created automatically if they do not exist.
+- **Unexpected Concept Merges**: Concepts with conditional overlap above 75% are merged by default. If you see too many distinct concepts merged, raise `--overlap-threshold` (e.g. `0.90`) or disable deduplication entirely with `--no-dedup`.
+- **Synthetic Ticket Cap**: When `--max-synthetic-ratio` is set, synthetic tickets created from hints might be capped relative to real tickets. Adjust or omit the ratio flag if you want to include all hints.
 
 ## Resources
 

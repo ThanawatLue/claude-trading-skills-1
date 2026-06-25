@@ -83,6 +83,34 @@ def _make_triggers(trigger_ids: list[str]) -> list[dict]:
     ]
 
 
+def _make_base_draft_for_test() -> dict:
+    """Provides a basic, generic draft for testing purposes."""
+    return {
+        "id": "test_strategy_v1",
+        "concept_id": "concept_abc",
+        "hypothesis_type": "some_hypothesis",
+        "mechanism_tag": "some_mechanism",
+        "entry_family": "research_only",
+        "regime": "Neutral",
+        "exit": {
+            "stop_loss_pct": 0.05,
+            "take_profit_rr": 2.0,
+            "time_stop_days": 15,
+        },
+        "risk": {
+            "position_sizing": "fixed_risk",
+            "risk_per_trade": 0.005,
+            "max_positions": 5,
+            "max_sector_exposure": 0.3,
+        },
+        "entry": {
+            "conditions": ["price_above_ma", "volume_confirm"],
+            "trend_filter": ["market_up"],
+        },
+        "thesis": "A generic test thesis.",
+        "invalidation_signals": [],
+    }
+
 # ---------------------------------------------------------------------------
 # Archetype Identification
 # ---------------------------------------------------------------------------
@@ -433,6 +461,130 @@ class TestSanitizeIdentifier:
 
 
 # ---------------------------------------------------------------------------
+# Objective Reframe Generation
+# ---------------------------------------------------------------------------
+
+
+class TestObjectiveReframes:
+    def test_reframe_tail_risk_modifies_exit_and_criteria(self):
+        draft = _make_base_draft_for_test()
+        triggers = _make_triggers(["tail_risk"])
+        source_arch = "trend_following_breakout" # A valid archetype for reframe processing
+
+        proposals = gp.generate_objective_reframes(draft, triggers, source_arch)
+
+        assert len(proposals) > 0
+        reframe_proposal = None
+        for p in proposals:
+            if "reframe_tail_risk" in p["id"]:
+                reframe_proposal = p
+                break
+        assert reframe_proposal is not None
+
+        # Verify exit adjustments
+        assert reframe_proposal["exit"]["stop_loss_pct"] == 0.04
+        assert reframe_proposal["exit"]["take_profit_rr"] == 1.5
+
+        # Verify new criteria
+        assert reframe_proposal["validation_plan"]["success_criteria"] == [
+            "max_drawdown_pct < 25",
+            "expected_value_after_costs > 0",
+        ]
+        assert reframe_proposal["pivot_metadata"]["why"] == (
+            "Reframe from return maximization to drawdown minimization"
+        )
+        assert reframe_proposal["pivot_metadata"]["targeted_triggers"] == ["tail_risk"]
+
+    def test_reframe_cost_defeat_modifies_exit_and_criteria(self):
+        draft = _make_base_draft_for_test()
+        triggers = _make_triggers(["cost_defeat"])
+        source_arch = "mean_reversion_pullback" # Another valid archetype
+
+        proposals = gp.generate_objective_reframes(draft, triggers, source_arch)
+
+        assert len(proposals) > 0
+        reframe_proposal = None
+        for p in proposals:
+            if "reframe_cost_defeat" in p["id"]:
+                reframe_proposal = p
+                break
+        assert reframe_proposal is not None
+
+        # Verify exit adjustments
+        assert reframe_proposal["exit"]["stop_loss_pct"] == 0.03
+        assert reframe_proposal["exit"]["take_profit_rr"] == 1.5
+        assert reframe_proposal["exit"]["time_stop_days"] == 5
+
+        # Verify new criteria
+        assert reframe_proposal["validation_plan"]["success_criteria"] == [
+            "win_rate > 55",
+            "expected_value_after_costs > 0",
+        ]
+        assert reframe_proposal["pivot_metadata"]["why"] == (
+            "Reframe to win rate maximization with smaller targets"
+        )
+        assert reframe_proposal["pivot_metadata"]["targeted_triggers"] == ["cost_defeat"]
+
+    def test_reframe_improvement_plateau_modifies_criteria_only(self):
+        draft = _make_base_draft_for_test()
+        triggers = _make_triggers(["improvement_plateau"])
+        source_arch = "earnings_drift_pead"
+
+        proposals = gp.generate_objective_reframes(draft, triggers, source_arch)
+        
+        assert len(proposals) > 0
+        reframe_proposal = None
+        for p in proposals:
+            if "reframe_improvement_plateau" in p["id"]:
+                reframe_proposal = p
+                break
+        assert reframe_proposal is not None
+
+        # Verify exit adjustments are NOT applied (empty in REFRAME_MAP)
+        # Should retain original values from _make_base_draft_for_test
+        assert reframe_proposal["exit"]["stop_loss_pct"] == 0.05
+        assert reframe_proposal["exit"]["take_profit_rr"] == 2.0
+        assert reframe_proposal["exit"]["time_stop_days"] == 15
+
+
+        # Verify new criteria
+        assert reframe_proposal["validation_plan"]["success_criteria"] == [
+            "risk_adjusted_return_per_exposure > 0.5",
+            "expected_value_after_costs > 0",
+        ]
+        assert reframe_proposal["pivot_metadata"]["why"] == (
+            "Reframe to risk-adjusted return per unit exposure"
+        )
+        assert reframe_proposal["pivot_metadata"]["targeted_triggers"] == ["improvement_plateau"]
+
+    def test_no_reframe_if_trigger_not_in_map(self):
+        draft = _make_base_draft_for_test()
+        triggers = _make_triggers(["non_existent_trigger"])
+        source_arch = "trend_following_breakout"
+
+        proposals = gp.generate_objective_reframes(draft, triggers, source_arch)
+        assert len(proposals) == 0
+
+    def test_reframe_no_compatible_archetypes_uses_default_set(self):
+        # If source_archetype is not in ARCHETYPE_CATALOG and compatible_pivots_from is empty
+        # or if ARCHETYPE_CATALOG itself is empty for some reason,
+        # it should default to a subset of available archetypes or handle gracefully.
+        draft = _make_base_draft_for_test()
+        triggers = _make_triggers(["tail_risk"])
+        # Use an archetype not explicitly in ARCHETYPE_CATALOG for this draft
+        # to test the 'else' branch for target_archetypes
+        proposals = gp.generate_objective_reframes(draft, triggers, "unknown_archetype")
+        
+        assert len(proposals) > 0 # Should still generate proposals based on default logic
+        # Check that proposals are generated and some reframe logic applied
+        reframe_proposal = proposals[0]
+        assert reframe_proposal["exit"]["stop_loss_pct"] == 0.04
+        assert reframe_proposal["validation_plan"]["success_criteria"] == [
+            "max_drawdown_pct < 25",
+            "expected_value_after_costs > 0",
+        ]
+
+# ---------------------------------------------------------------------------
 # Cross-Validation with candidate_contract.py
 # ---------------------------------------------------------------------------
 
@@ -519,3 +671,405 @@ class TestCrossValidation:
         their_val_errors = [e for e in their_errors if "validation" in e]
         assert our_val_errors == []
         assert their_val_errors == []
+
+
+# ---------------------------------------------------------------------------
+# Output Functions
+# ---------------------------------------------------------------------------
+
+
+class TestOutputFunctions:
+    @pytest.fixture
+    def mock_paths(self, mocker):
+        """Mocks Path.mkdir and Path.write_text for testing file outputs."""
+        mocker.patch("pathlib.Path.mkdir")
+        mocker.patch("pathlib.Path.write_text")
+        return mocker
+
+    @pytest.fixture
+    def dummy_data(self):
+        """Provides dummy data for testing output functions."""
+        source_draft = _make_breakout_draft()
+        source_draft["_source_path"] = "/app/strategy.yaml"
+
+        diagnosis = {
+            "strategy_id": "my_breakout_v1",
+            "triggers_fired": _make_triggers(["cost_defeat", "tail_risk"]),
+            "recommendation": "pivot",
+            "score_trajectory": [100, 90, 80],
+            "_source_path": "/app/diagnosis.json",
+        }
+
+        selected_proposals = [
+            {
+                "id": "pivot_my_breakout_v1_inv_cost_defeat_mean_reversion_pullback",
+                "entry_family": "research_only",
+                "exit": {"time_stop_days": 7, "stop_loss_pct": 0.04},
+                "pivot_metadata": {
+                    "pivot_technique": "assumption_inversion",
+                    "source_strategy_id": "my_breakout_v1",
+                    "target_archetype": "mean_reversion_pullback",
+                    "what_changed": {"signal": "Inversion: horizon -> shorten"},
+                    "why": "Reduce friction exposure",
+                    "scores": {"combined": 0.7, "quality_potential": 0.8, "novelty": 0.6},
+                },
+            },
+            {
+                "id": "pivot_my_breakout_v1_switch_volatility_contraction",
+                "entry_family": "pivot_breakout",
+                "exit": {"time_stop_days": 20, "stop_loss_pct": 0.05},
+                "pivot_metadata": {
+                    "pivot_technique": "archetype_switch",
+                    "source_strategy_id": "my_breakout_v1",
+                    "target_archetype": "volatility_contraction",
+                    "what_changed": {"signal": "Architecture switch"},
+                    "why": "Structural pivot",
+                    "scores": {"combined": 0.8, "quality_potential": 0.9, "novelty": 0.7},
+                },
+            },
+        ]
+
+        # Add `pivot_metadata` for write_outputs to pop and restore
+        for proposal in selected_proposals:
+            if "pivot_metadata" not in proposal:
+                proposal["pivot_metadata"] = {}
+            if "scores" not in proposal["pivot_metadata"]:
+                proposal["pivot_metadata"]["scores"] = {
+                    "combined": 0.5,
+                    "quality_potential": 0.5,
+                    "novelty": 0.5,
+                }
+        return source_draft, diagnosis, selected_proposals
+
+    def test_write_outputs_creates_files(self, mock_paths, dummy_data):
+        source_draft, diagnosis, selected_proposals = dummy_data
+        output_dir = gp.Path("/tmp/reports")
+
+        # Mock datetime to ensure consistent filenames
+        mocker = mock_paths
+        fake_now = gp.datetime(2023, 10, 26, 10, 30, 0, tzinfo=gp.timezone.utc)
+        mocker.patch("generate_pivots.datetime", autospec=True)
+        gp.datetime.now.return_value = fake_now
+        gp.datetime.strftime = fake_now.strftime  # Mock static method strftime
+
+        manifest = gp.write_outputs(selected_proposals, diagnosis, source_draft, output_dir)
+
+        # Verify directories were created
+        output_dir.mkdir.assert_called_with(parents=True, exist_ok=True)
+        assert gp.Path("/tmp/reports/pivot_drafts/research_only").mkdir.called
+        assert gp.Path("/tmp/reports/pivot_drafts/exportable").mkdir.called
+
+        # Verify YAML draft files were written
+        assert gp.Path.write_text.call_count >= 3  # 2 drafts + 1 manifest + 1 report
+        yaml_calls = [
+            call_args
+            for call_args in gp.Path.write_text.call_args_list
+            if str(call_args.args[0]).endswith(".yaml")
+        ]
+        assert len(yaml_calls) == 2  # Two proposals, one research_only, one exportable
+
+        # Check a research_only draft
+        research_draft_call = next(
+            (c for c in yaml_calls if "research_only" in str(c.args[0])), None
+        )
+        assert research_draft_call is not None
+        assert (
+            "pivot_my_breakout_v1_inv_cost_defeat_mean_reversion_pullback_20231026_103000.yaml"
+            in str(research_draft_call.args[0])
+        )
+        assert "exit" in research_draft_call.args[1]  # Check content
+
+        # Check an exportable draft and its ticket
+        exportable_draft_call = next(
+            (c for c in yaml_calls if "exportable" in str(c.args[0]) and "ticket" not in str(c.args[0])),
+            None,
+        )
+        assert exportable_draft_call is not None
+        assert (
+            "pivot_my_breakout_v1_switch_volatility_contraction_20231026_103000.yaml"
+            in str(exportable_draft_call.args[0])
+        )
+        assert "exit" in exportable_draft_call.args[1]
+
+        exportable_ticket_call = next(
+            (c for c in yaml_calls if "ticket_" in str(c.args[0])), None
+        )
+        assert exportable_ticket_call is not None
+        assert (
+            "ticket_my_breakout_v1_switch_volatility_contraction_20231026_103000.yaml"
+            in str(exportable_ticket_call.args[0])
+        )
+        assert "entry_family" in exportable_ticket_call.args[1]
+
+        # Verify manifest JSON was written
+        json_call = next(
+            (c for c in gp.Path.write_text.call_args_list if str(c.args[0]).endswith(".json")),
+            None,
+        )
+        assert json_call is not None
+        assert "pivot_manifest_my_breakout_v1_20231026_103000.json" in str(json_call.args[0])
+        manifest_content = json.loads(json_call.args[1])
+        assert manifest_content["strategy_id"] == "my_breakout_v1"
+        assert len(manifest_content["drafts"]) == 2
+        assert len(manifest_content["errors"]) == 0 # Should be 0 if _validate_ticket_minimal passes
+
+        # Verify report Markdown was written
+        report_call = next(
+            (c for c in gp.Path.write_text.call_args_list if str(c.args[0]).endswith(".md")),
+            None,
+        )
+        assert report_call is not None
+        assert "pivot_report_my_breakout_v1_20231026_103000.md" in str(report_call.args[0])
+        assert "## Stagnation Diagnosis" in report_call.args[1] # Check content
+
+        # Verify manifest return value
+        assert manifest["total_pivots_generated"] == 2
+        assert manifest["exportable_count"] == 1
+        assert manifest["research_only_count"] == 1
+
+    def test_build_report_content(self, dummy_data):
+        source_draft, diagnosis, selected_proposals = dummy_data
+
+        manifest = {
+            "generated_at_utc": "2023-10-26T10:30:00",
+            "strategy_id": "my_breakout_v1",
+            "triggers_fired": ["cost_defeat", "tail_risk"],
+        }
+
+        report_content = gp._build_report(selected_proposals, diagnosis, source_draft, manifest)
+
+        assert "# Pivot Report: my_breakout_v1" in report_content
+        assert "**Generated**: 2023-10-26T10:30:00" in report_content
+        assert "**Source Strategy**: my_breakout_v1" in report_content
+        assert "**Recommendation**: pivot" in report_content
+        assert "## Stagnation Diagnosis" in report_content
+        assert "- **cost_defeat** [high]: Trigger cost_defeat fired" in report_content
+        assert "- **tail_risk** [high]: Trigger tail_risk fired" in report_content
+        assert "## Pivot Proposals" in report_content
+
+        # Check first proposal details
+        assert "### 1. pivot_my_breakout_v1_inv_cost_defeat_mean_reversion_pullback" in report_content
+        assert "**Technique**: assumption_inversion" in report_content
+        assert "**Target Archetype**: mean_reversion_pullback" in report_content
+        assert "**Entry Family**: research_only" in report_content
+        assert "- signal: Inversion: horizon -> shorten" in report_content
+        assert "**Why**: Reduce friction exposure" in report_content
+        assert (
+            "**Scores**: quality=0.80, novelty=0.60, combined=0.70" in report_content
+        ) # Ensure scores are formatted correctly
+
+        # Check second proposal details
+        assert "### 2. pivot_my_breakout_v1_switch_volatility_contraction" in report_content
+        assert "**Technique**: archetype_switch" in report_content
+        assert "**Target Archetype**: volatility_contraction" in report_content
+        assert "**Entry Family**: pivot_breakout" in report_content
+        assert "- signal: Architecture switch" in report_content
+        assert "**Why**: Structural pivot" in report_content
+        assert (
+            "**Scores**: quality=0.90, novelty=0.70, combined=0.80" in report_content
+        ) # Ensure scores are formatted correctly
+
+        # Check summary table
+        assert "| Rank | Proposal | Archetype | Combined | Category |" in report_content
+        assert "|------|----------|-----------|----------|----------|" in report_content
+        assert (
+            "| 1 | pivot_my_breakout_v1_inv_cost_defeat_mean_reversion_pullback | mean_reversion_pullback | 0.70 | research_only |"
+            in report_content
+        )
+        assert (
+            "| 2 | pivot_my_breakout_v1_switch_volatility_contraction | volatility_contraction | 0.80 | exportable |"
+            in report_content
+        )
+
+
+# ---------------------------------------------------------------------------
+# _build_base_draft tests
+# ---------------------------------------------------------------------------
+
+
+class TestBuildBaseDraft:
+    @pytest.fixture
+    def mock_datetime(self, mocker):
+        """Mock datetime.now to ensure consistent 'as_of' dates."""
+        fake_now = gp.datetime(2023, 1, 1, tzinfo=gp.timezone.utc)
+        mocker.patch("generate_pivots.datetime", autospec=True)
+        gp.datetime.now.return_value = fake_now
+        gp.datetime.strftime = fake_now.strftime
+        return fake_now
+
+    def test_build_base_draft_defaults_and_inheritance(self, mock_datetime):
+        source_draft = {
+            "id": "source_strat_v1",
+            "concept_id": "original_concept",
+            "regime": "Bear",
+            "thesis": "Original thesis",
+            "invalidation_signals": ["sig_a", "sig_b"],
+        }
+        arch_id = "mean_reversion_pullback"
+        arch_details = gp.ARCHETYPE_CATALOG[arch_id]
+        proposal_id = "test_proposal_id"
+
+        result = gp._build_base_draft(source_draft, arch_id, arch_details, proposal_id)
+
+        assert result["id"] == proposal_id
+        assert result["as_of"] == mock_datetime.strftime("%Y-%m-%d")
+        assert result["concept_id"] == source_draft["concept_id"]
+        assert result["variant"] == "research_probe"
+        assert result["name"] == "Mean Reversion Pullback (pivoted from source_strat_v1)"
+        assert result["hypothesis_type"] == arch_details["hypothesis_type"]
+        assert result["mechanism_tag"] == arch_details["mechanism_tag"]
+        assert result["regime"] == source_draft["regime"]
+        assert result["entry_family"] == arch_details["entry_family"]
+
+        # Check entry conditions from archetype
+        assert result["entry"]["conditions"] == arch_details["default_conditions"]
+        assert result["entry"]["trend_filter"] == arch_details["default_trend_filter"]
+
+        # Check exit values from archetype defaults
+        assert result["exit"]["stop_loss_pct"] == arch_details["default_stop_loss_pct"]
+        assert result["exit"]["take_profit_rr"] == arch_details["default_take_profit_rr"]
+        assert result["exit"]["time_stop_days"] == arch_details["default_time_stop_days"]
+
+        # Check risk (hardcoded values in _build_base_draft)
+        assert result["risk"]["position_sizing"] == "fixed_risk"
+        assert result["risk"]["max_positions"] == 5
+
+        # Check validation plan default criteria
+        assert "expected_value_after_costs > 0" in result["validation_plan"]["success_criteria"]
+
+        # Check inherited fields
+        assert result["thesis"] == source_draft["thesis"]
+        assert result["invalidation_signals"] == source_draft["invalidation_signals"]
+
+    def test_build_base_draft_export_ready_flag(self, mock_datetime):
+        source_draft = {"id": "source_strat_v1"}
+        proposal_id = "test_proposal_id"
+
+        # Test exportable archetype
+        arch_id_exportable = "trend_following_breakout" # entry_family: pivot_breakout
+        arch_details_exportable = gp.ARCHETYPE_CATALOG[arch_id_exportable]
+        result_exportable = gp._build_base_draft(
+            source_draft, arch_id_exportable, arch_details_exportable, proposal_id
+        )
+        assert result_exportable["export_ready_v1"] is True
+
+        # Test non-exportable archetype
+        arch_id_research_only = "mean_reversion_pullback" # entry_family: research_only
+        arch_details_research_only = gp.ARCHETYPE_CATALOG[arch_id_research_only]
+        result_research_only = gp._build_base_draft(
+            source_draft, arch_id_research_only, arch_details_research_only, proposal_id
+        )
+        assert result_research_only["export_ready_v1"] is False
+
+    def test_build_base_draft_validation_plan_hold_days(self, mock_datetime):
+        source_draft = {"id": "source_strat_v1"}
+        proposal_id = "test_proposal_id"
+
+        # Test short hold days (<=14)
+        arch_id_short_hold = "mean_reversion_pullback" # default_time_stop_days: 7
+        arch_details_short_hold = gp.ARCHETYPE_CATALOG[arch_id_short_hold]
+        result_short = gp._build_base_draft(
+            source_draft, arch_id_short_hold, arch_details_short_hold, proposal_id
+        )
+        assert result_short["validation_plan"]["hold_days"] == [3, 7, 14]
+
+        # Test long hold days (>14)
+        arch_id_long_hold = "regime_conditional_carry" # default_time_stop_days: 60
+        arch_details_long_hold = gp.ARCHETYPE_CATALOG[arch_id_long_hold]
+        result_long = gp._build_base_draft(
+            source_draft, arch_id_long_hold, arch_details_long_hold, proposal_id
+        )
+        assert result_long["validation_plan"]["hold_days"] == [5, 20, 60]
+
+
+# ---------------------------------------------------------------------------
+# CLI Integration Tests
+# ---------------------------------------------------------------------------
+
+
+class TestCliIntegration:
+    @pytest.fixture(autouse=True)
+    def setup(self, tmp_path, monkeypatch):
+        self.tmp_path = tmp_path
+        self.diagnosis_path = tmp_path / "diagnosis.json"
+        self.strategy_path = tmp_path / "strategy.yaml"
+        self.output_dir = tmp_path / "output"
+        self.output_dir.mkdir()
+        self.monkeypatch = monkeypatch
+        self.monkeypatch.setattr("sys.stdout", open(os.devnull, "w"))  # Suppress stdout
+
+    def _create_diagnosis_file(self, content):
+        with open(self.diagnosis_path, "w") as f:
+            json.dump(content, f)
+
+    def _create_strategy_file(self, content):
+        with open(self.strategy_path, "w") as f:
+            yaml.safe_dump(content, f)
+
+    def _run_main(self, extra_args=None):
+        args = [
+            "generate_pivots.py",
+            "--diagnosis",
+            str(self.diagnosis_path),
+            "--strategy",
+            str(self.strategy_path),
+            "--output-dir",
+            str(self.output_dir),
+        ]
+        if extra_args:
+            args.extend(extra_args)
+        self.monkeypatch.setattr("sys.argv", args)
+        try:
+            return gp.main()
+        finally:
+            self.monkeypatch.undo() # Clean up the monkeypatch
+
+    def test_main_missing_diagnosis_file_returns_error(self):
+        self._create_strategy_file(_make_breakout_draft())
+        exit_code = self._run_main()
+        assert exit_code == 1
+        assert "diagnosis file not found" in sys.stderr.getvalue()
+
+    def test_main_missing_strategy_file_returns_error(self):
+        self._create_diagnosis_file({"strategy_id": "test", "triggers_fired": []})
+        exit_code = self._run_main()
+        assert exit_code == 1
+        assert "strategy file not found" in sys.stderr.getvalue()
+
+    def test_main_no_triggers_fired_returns_zero(self):
+        self._create_diagnosis_file({"strategy_id": "test", "triggers_fired": []})
+        self._create_strategy_file(_make_breakout_draft())
+        exit_code = self._run_main()
+        assert exit_code == 0
+        # No output files should be generated
+        assert not any(self.output_dir.iterdir())
+
+    def test_main_successful_execution_generates_files(self):
+        self._create_diagnosis_file(
+            {
+                "strategy_id": "my_breakout_v1",
+                "triggers_fired": [{"trigger": "cost_defeat", "severity": "high"}],
+            }
+        )
+        self._create_strategy_file(_make_breakout_draft())
+        exit_code = self._run_main()
+        assert exit_code == 0
+        # Check if output files are generated
+        assert any(self.output_dir.glob("pivot_manifest_*.json"))
+        assert any(self.output_dir.glob("pivot_report_*.md"))
+        assert any(self.output_dir.glob("pivot_drafts/**/*.yaml"))
+
+    def test_main_corrupt_strategy_file_returns_error(self):
+        self._create_diagnosis_file(
+            {
+                "strategy_id": "my_breakout_v1",
+                "triggers_fired": [{"trigger": "cost_defeat", "severity": "high"}],
+            }
+        )
+        with open(self.strategy_path, "w") as f:
+            f.write("{broken yaml!!!")
+        exit_code = self._run_main()
+        assert exit_code == 1
+        assert "strategy file must be a YAML mapping" in sys.stderr.getvalue()
+
+

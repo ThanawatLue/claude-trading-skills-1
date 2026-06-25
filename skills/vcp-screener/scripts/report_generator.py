@@ -62,6 +62,25 @@ def generate_markdown_report(
     lines.append(f"**Generated:** {metadata.get('generated_at', 'N/A')}")
     lines.append(f"**Universe:** {metadata.get('universe_description', 'S&P 500')}")
     lines.append("")
+
+    # Expectancy Calibration Alert
+    se = metadata.get("strategy_expectancy")
+    if se and se.get("expectancy_r") is not None:
+        exp_r = se["expectancy_r"]
+        count = se["closed_trades_count"]
+        lines.append("## Strategy Expectancy Calibration")
+        lines.append(f"Recent expectancy (last {count} closed trades): **{exp_r:+.2f}R**")
+        if exp_r < 0:
+            lines.append("")
+            lines.append("> [!WARNING]")
+            lines.append(f"> **Negative Expectancy Alert:** This strategy has negative expectancy ({exp_r:+.2f}R) recently.")
+            lines.append("> It is recommended to raise the composite score threshold to **85+** and reduce position sizing.")
+        else:
+            lines.append("")
+            lines.append("> [!NOTE]")
+            lines.append(f"> **Positive Expectancy:** This strategy has positive expectancy ({exp_r:+.2f}R) recently. Normal parameters apply.")
+        lines.append("")
+
     lines.append("---")
     lines.append("")
 

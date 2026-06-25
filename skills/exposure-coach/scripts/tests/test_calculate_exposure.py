@@ -3,7 +3,8 @@
 import json
 
 from calculate_exposure import (
-    CRITICAL_INPUTS,
+    US_CRITICAL_INPUTS,
+    TH_CRITICAL_INPUTS,
     WEIGHTS,
     calculate_composite_score,
     determine_bias,
@@ -50,6 +51,12 @@ class TestExtractBreadthScore:
     def test_empty_dict(self):
         assert extract_breadth_score({}) is None
 
+    def test_nested_composite_score(self):
+        data = {"composite": {"composite_score": 69.7}}
+        assert extract_breadth_score(data) == 69
+        data2 = {"composite": {"score": 51.16}}
+        assert extract_breadth_score(data2) == 51
+
 
 class TestExtractUptrendScore:
     """Tests for uptrend score extraction."""
@@ -72,6 +79,12 @@ class TestExtractUptrendScore:
         data = {"uptrend_pct": 15}
         score = extract_uptrend_score(data)
         assert score < 30
+
+    def test_nested_composite_score(self):
+        data = {"composite": {"composite_score": 75.0}}
+        assert extract_uptrend_score(data) == 75
+        data2 = {"composite": {"score": 55.5}}
+        assert extract_uptrend_score(data2) == 55
 
 
 class TestExtractRegimeScore:
@@ -118,6 +131,13 @@ class TestExtractTopRiskScore:
     def test_distribution_days_many(self):
         data = {"distribution_days": 8}
         assert extract_top_risk_score(data) == 15
+
+    def test_nested_composite_score(self):
+        # composite score is risk score (higher is higher risk), so safety score is inverted: 100 - risk
+        data = {"composite": {"composite_score": 43.6}}
+        assert extract_top_risk_score(data) == 56
+        data2 = {"composite": {"score": 20.0}}
+        assert extract_top_risk_score(data2) == 80
 
 
 class TestCalculateCompositeScore:
@@ -262,7 +282,7 @@ class TestDetermineConfidence:
         provided = list(WEIGHTS.keys())[:6]
         missing = list(WEIGHTS.keys())[6:]
         # Remove critical from missing
-        missing = [m for m in missing if m not in CRITICAL_INPUTS]
+        missing = [m for m in missing if m not in US_CRITICAL_INPUTS]
         conf = determine_confidence(provided, missing)
         assert conf == "HIGH"
 

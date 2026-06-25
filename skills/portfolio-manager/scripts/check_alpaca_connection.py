@@ -25,6 +25,12 @@ except ImportError:
     sys.exit(1)
 
 
+class AlpacaCredentialError(Exception):
+    """Custom exception for missing or invalid Alpaca credentials."""
+
+    pass
+
+
 def load_credentials():
     """Load Alpaca API credentials from environment variables."""
     api_key = os.environ.get("ALPACA_API_KEY")
@@ -32,17 +38,10 @@ def load_credentials():
     paper = os.environ.get("ALPACA_PAPER", "true").lower() == "true"
 
     if not api_key or not secret_key:
-        print("ERROR: Alpaca API credentials not found")
-        print("\nPlease set environment variables:")
-        print("  export ALPACA_API_KEY='your_api_key_id'")
-        print("  export ALPACA_SECRET_KEY='your_secret_key'")
-        print("  export ALPACA_PAPER='true'  # or 'false' for live trading")
-        print("\nOr add to your shell config file (~/.bashrc or ~/.zshrc):")
-        print("  echo 'export ALPACA_API_KEY=\"your_key\"' >> ~/.bashrc")
-        print("  echo 'export ALPACA_SECRET_KEY=\"your_secret\"' >> ~/.bashrc")
-        print("  echo 'export ALPACA_PAPER=\"true\"' >> ~/.bashrc")
-        print("  source ~/.bashrc")
-        sys.exit(1)
+        raise AlpacaCredentialError(
+            "Alpaca API credentials not found. Please set ALPACA_API_KEY "
+            "and ALPACA_SECRET_KEY environment variables."
+        )
 
     return api_key, secret_key, paper
 
@@ -225,14 +224,28 @@ def main():
     print("Alpaca API Connection Test")
     print("=" * 60)
 
-    # Load credentials
-    api_key, secret_key, paper = load_credentials()
+    try:
+        # Load credentials
+        api_key, secret_key, paper = load_credentials()
+    except AlpacaCredentialError as e:
+        print(f"ERROR: {e}")
+        print("\nPlease set environment variables:")
+        print("  export ALPACA_API_KEY='your_api_key_id'")
+        print("  export ALPACA_SECRET_KEY='your_secret_key'")
+        print("  export ALPACA_PAPER='true'  # or 'false' for live trading")
+        print("\nOr add to your shell config file (~/.bashrc or ~/.zshrc):")
+        print("  echo 'export ALPACA_API_KEY=\"your_key\"' >> ~/.bashrc")
+        print("  echo 'export ALPACA_SECRET_KEY=\"your_secret\"' >> ~/.bashrc")
+        print("  echo 'export ALPACA_PAPER=\"true\"' >> ~/.bashrc")
+        print("  source ~/.bashrc")
+        return 1
+
     base_url = get_base_url(paper)
 
     mode = "PAPER TRADING" if paper else "LIVE TRADING"
     print(f"\nMode: {mode}")
     print(f"Base URL: {base_url}")
-    print(f"API Key: {api_key[:8]}...{api_key[-4:]}")
+    print(f"API Key: ****************{api_key[-4:]}")  # Mask full key, show last 4 chars
 
     # Run tests
     success = True

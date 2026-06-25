@@ -3,7 +3,7 @@ layout: default
 title: "Earnings Calendar"
 grand_parent: English
 parent: Skill Guides
-nav_order: 15
+nav_order: 19
 lang_peer: /ja/skills/earnings-calendar/
 permalink: /en/skills/earnings-calendar/
 ---
@@ -42,7 +42,17 @@ This skill retrieves upcoming earnings announcements for US stocks using the Fin
 
 ---
 
-## 2. Prerequisites
+## 2. When to Use
+
+Use this skill when:
+- You need to retrieve upcoming earnings announcements for US stocks.
+- You want to know which mid-to-large cap companies (>$2B market cap) are reporting earnings in the upcoming week.
+- You require a weekly earnings review to identify companies with significant market impact.
+- You are looking for earnings calendar data presented in an organized, clean markdown table format, grouped by date and timing.
+
+---
+
+## 3. Prerequisites
 
 ### FMP API Key
 
@@ -69,7 +79,7 @@ API key will be requested during skill execution (stored only for current sessio
 
 ---
 
-## 3. Quick Start
+## 4. Quick Start
 
 ```bash
 # Default: next 7 days, market cap > $2B
@@ -83,7 +93,7 @@ python3 earnings-calendar/scripts/fetch_earnings_fmp.py \
 
 ---
 
-## 4. Workflow
+## 5. Workflow
 
 ### Step 1: Get Current Date and Calculate Target Week
 
@@ -220,6 +230,9 @@ python scripts/fetch_earnings_fmp.py 2025-11-03 2025-11-09
 ```bash
 python scripts/fetch_earnings_fmp.py 2025-11-03 2025-11-09 "${API_KEY}"
 ```
+
+**Warning on Command-Line API Key Usage**:
+While the CLI offers flexibility, passing API keys directly as command-line arguments (e.g., `python script.py start_date end_date YOUR_API_KEY`) is less secure. This can expose your API key in shell history, process lists (`ps aux`), and may be logged by system utilities. **For regular use and enhanced security, always prefer setting the `FMP_API_KEY` environment variable.**
 
 **Script Workflow** (automatic):
 1. Validates API key and date parameters
@@ -386,7 +399,7 @@ The script automatically handles all formatting including:
 
 ---
 
-## 5. Resources
+## 6. Resources
 
 **References:**
 

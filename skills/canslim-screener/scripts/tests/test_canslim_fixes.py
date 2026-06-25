@@ -352,7 +352,7 @@ class TestReportGeneratorTopParameter:
         try:
             generate_markdown_report(results, metadata, output_file)
 
-            with open(output_file) as f:
+            with open(output_file, encoding="utf-8") as f:
                 content = f.read()
 
             # Check that the header says "Top 30" not "Top 20"
@@ -394,7 +394,7 @@ class TestReportGeneratorTopParameter:
         try:
             generate_markdown_report(results, metadata, output_file)
 
-            with open(output_file) as f:
+            with open(output_file, encoding="utf-8") as f:
                 content = f.read()
 
             assert "Top 5" in content, "Report header should say 'Top 5'"
@@ -492,35 +492,15 @@ class TestBenchmarkScaleConsistency:
         )
 
     def test_screen_canslim_uses_gspc_for_historical(self):
-        """Verify that screen_canslim.py uses ^GSPC (not SPY) for historical data."""
-        import re
-
+        """Verify that screen_canslim.py uses ^GSPC (not SPY) for historical data in the US path."""
         screen_file = os.path.join(SCRIPTS_DIR, "screen_canslim.py")
 
-        with open(screen_file) as f:
+        with open(screen_file, encoding="utf-8") as f:
             content = f.read()
 
-        # Find all get_historical_prices calls for S&P 500 / market data
-        hist_calls = re.findall(
-            r'client\.get_historical_prices\(\s*["\']([^"\']+)["\']',
-            content,
-        )
-
-        # Find the quote call for S&P 500
-        quote_calls = re.findall(
-            r'client\.get_quote\(\s*["\'](\^GSPC[^"\']*)["\']',
-            content,
-        )
-
-        assert len(quote_calls) >= 1, "Should have at least one ^GSPC quote call"
-
-        # The historical call for market data should use ^GSPC, not SPY
-        market_hist_tickers = [t for t in hist_calls if t in ("^GSPC", "SPY")]
-        assert "^GSPC" in market_hist_tickers, (
-            f"Historical prices for market data should use ^GSPC, "
-            f"found tickers: {market_hist_tickers}"
-        )
-        assert "SPY" not in market_hist_tickers, (
-            f"Historical prices should NOT use SPY (scale mismatch with ^GSPC quote), "
-            f"found tickers: {market_hist_tickers}"
-        )
+        # Check that benchmark_symbol is defined and uses ^GSPC as fallback
+        assert "benchmark_symbol =" in content
+        assert "^GSPC" in content
+        # Check that get_quote and get_historical_prices use benchmark_symbol
+        assert "client.get_quote(benchmark_symbol)" in content
+        assert "client.get_historical_prices(benchmark_symbol" in content

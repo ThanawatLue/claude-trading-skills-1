@@ -146,12 +146,12 @@ def check_price_scale(content: str) -> list[Finding]:
 # ---------------------------------------------------------------------------
 
 NOTATION_GROUPS: dict[str, list[str]] = {
-    "gold": ["Gold", "GLD", "GC", "金", "金先物", "ゴールド"],
+    "gold": ["Gold", "GLD", "GC"],
     "sp500": ["S&P 500", "S&P500", "SPX", "SPY", "SP500"],
-    "oil": ["WTI", "Crude", "CL", "USO", "原油"],
-    "silver": ["Silver", "SLV", "SI", "銀"],
-    "bonds": ["TLT", "10Y", "10年債", "米国債"],
-    "vix": ["VIX", "恐怖指数"],
+    "oil": ["WTI", "Crude", "CL", "USO"],
+    "silver": ["Silver", "SLV", "SI"],
+    "bonds": ["TLT", "10Y"],
+    "vix": ["VIX"],
 }
 
 
@@ -203,15 +203,6 @@ WEEKDAY_MAP_EN: dict[str, int] = {
     "sun": 6,
 }
 
-WEEKDAY_MAP_JA: dict[str, int] = {
-    "月": 0,
-    "火": 1,
-    "水": 2,
-    "木": 3,
-    "金": 4,
-    "土": 5,
-    "日": 6,
-}
 
 MONTH_MAP: dict[str, int] = {
     "january": 1,
@@ -297,7 +288,7 @@ def infer_year(
 def check_dates(
     content: str, as_of: date | None = None, filepath: str | None = None
 ) -> list[Finding]:
-    """Check date-weekday mismatches in English and Japanese content."""
+    """Check date-weekday mismatches in English content."""
     findings: list[Finding] = []
 
     # ---- English with year: "February 28, 2026 (Friday)" ----
@@ -390,69 +381,6 @@ def check_dates(
                 )
             )
 
-    # ---- Japanese: "1月1日（木）" or "1月1日（木曜日）" ----
-    ja_pat = re.compile(r"(\d{1,2})月(\d{1,2})日[（(]([月火水木金土日])(?:曜日)?[）)]")
-    for m in ja_pat.finditer(content):
-        month_val = int(m.group(1))
-        day_val = int(m.group(2))
-        weekday_char = m.group(3)
-
-        year = infer_year(month_val, day_val, as_of, content, filepath)
-        try:
-            d = date(year, month_val, day_val)
-        except ValueError:
-            continue
-
-        actual_weekday = d.weekday()
-        stated_weekday = WEEKDAY_MAP_JA.get(weekday_char)
-
-        if stated_weekday is not None and stated_weekday != actual_weekday:
-            ja_names = {0: "月", 1: "火", 2: "水", 3: "木", 4: "金", 5: "土", 6: "日"}
-            line_num = content[: m.start()].count("\n") + 1
-            findings.append(
-                Finding(
-                    severity="WARNING",
-                    category="dates",
-                    message=(
-                        f"Date-weekday mismatch: {m.group(0)} "
-                        f"-- actual weekday is {ja_names[actual_weekday]} "
-                        f"(inferred year: {year})"
-                    ),
-                    line_number=line_num,
-                )
-            )
-
-    # ---- Japanese slash format: "1/1(木)" ----
-    ja_slash_pat = re.compile(r"(\d{1,2})/(\d{1,2})[（(]([月火水木金土日])[）)]")
-    for m in ja_slash_pat.finditer(content):
-        month_val = int(m.group(1))
-        day_val = int(m.group(2))
-        weekday_char = m.group(3)
-
-        year = infer_year(month_val, day_val, as_of, content, filepath)
-        try:
-            d = date(year, month_val, day_val)
-        except ValueError:
-            continue
-
-        actual_weekday = d.weekday()
-        stated_weekday = WEEKDAY_MAP_JA.get(weekday_char)
-
-        if stated_weekday is not None and stated_weekday != actual_weekday:
-            ja_names = {0: "月", 1: "火", 2: "水", 3: "木", 4: "金", 5: "土", 6: "日"}
-            line_num = content[: m.start()].count("\n") + 1
-            findings.append(
-                Finding(
-                    severity="WARNING",
-                    category="dates",
-                    message=(
-                        f"Date-weekday mismatch: {m.group(0)} "
-                        f"-- actual weekday is {ja_names[actual_weekday]} "
-                        f"(inferred year: {year})"
-                    ),
-                    line_number=line_num,
-                )
-            )
 
     return findings
 
@@ -462,21 +390,14 @@ def check_dates(
 # ---------------------------------------------------------------------------
 
 ALLOCATION_HEADING_KEYWORDS: list[str] = [
-    "配分",
-    "アロケーション",
     "allocation",
-    "セクター配分",
     "asset allocation",
 ]
 
 ALLOCATION_TABLE_KEYWORDS: list[str] = [
-    "配分",
     "allocation",
-    "ウェイト",
     "weight",
-    "比率",
     "ratio",
-    "目安比率",
 ]
 
 
@@ -490,8 +411,8 @@ def find_allocation_sections(content: str) -> list[str]:
         if not re.match(r"^#{1,6}\s", line):
             continue
         heading_text = re.sub(r"^#{1,6}\s+", "", line).strip().lower()
-        # Skip ポジション alone (without 配分)
-        if "ポジション" in heading_text and "配分" not in heading_text:
+        # Skip position alone without allocation
+        if "position" in heading_text and "allocation" not in heading_text:
             continue
         if any(kw.lower() in heading_text for kw in ALLOCATION_HEADING_KEYWORDS):
             section_lines: list[str] = []
@@ -639,7 +560,7 @@ def check_units(content: str) -> list[Finding]:
     has_bp = bool(re.search(r"\d+\s*bp", content, re.IGNORECASE))
     has_pct_rate = bool(
         re.search(
-            r"(?:yield|rate|利回り|金利).*?\d+(?:\.\d+)?%",
+            r"(?:yield|rate).*?\d+(?:\.\d+)?%",
             content,
             re.IGNORECASE,
         )

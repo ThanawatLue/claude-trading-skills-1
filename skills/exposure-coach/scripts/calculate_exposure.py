@@ -26,7 +26,9 @@ WEIGHTS = {
 }
 
 # Critical inputs that reduce confidence when missing
-CRITICAL_INPUTS = {"regime", "top_risk", "breadth"}
+# This is the default for US market. TH market will use different critical inputs.
+US_CRITICAL_INPUTS = {"regime", "top_risk", "breadth"}
+TH_CRITICAL_INPUTS = {"breadth"}
 
 # Regime to baseline score mapping
 REGIME_SCORES = {
@@ -59,6 +61,12 @@ def extract_breadth_score(data: Optional[dict]) -> Optional[int]:
         return int(data["breadth_score"])
     if "composite_score" in data:
         return int(data["composite_score"])
+    if "composite" in data and isinstance(data["composite"], dict):
+        c = data["composite"]
+        if "composite_score" in c:
+            return int(c["composite_score"])
+        if "score" in c:
+            return int(c["score"])
     if "ad_ratio" in data and "nh_nl_ratio" in data:
         ad = data["ad_ratio"]
         nh_nl = data["nh_nl_ratio"]
@@ -79,6 +87,12 @@ def extract_uptrend_score(data: Optional[dict]) -> Optional[int]:
         return None
     if "uptrend_score" in data:
         return int(data["uptrend_score"])
+    if "composite" in data and isinstance(data["composite"], dict):
+        c = data["composite"]
+        if "composite_score" in c:
+            return int(c["composite_score"])
+        if "score" in c:
+            return int(c["score"])
     if "uptrend_pct" in data:
         pct = data["uptrend_pct"]
         if pct > 50:
@@ -124,6 +138,11 @@ def extract_top_risk_score(data: Optional[dict]) -> Optional[int]:
         return None
     if "top_risk_score" in data:
         return int(data["top_risk_score"])
+    if "composite" in data and isinstance(data["composite"], dict):
+        c = data["composite"]
+        score = c.get("composite_score") or c.get("score")
+        if score is not None:
+            return max(0, min(100, int(100 - float(score))))
     if "top_probability" in data:
         prob = data["top_probability"]
         # Invert: high probability = low score
@@ -218,6 +237,7 @@ def extract_institutional_score(data: Optional[dict]) -> Optional[int]:
 
 def calculate_composite_score(
     scores: dict[str, Optional[int]],
+    market: str = "US",
 ) -> tuple[float, list[str], list[str]]:
     """
     Calculate weighted composite score.
@@ -245,7 +265,8 @@ def calculate_composite_score(
     composite = weighted_sum / total_weight
 
     # Apply haircut for missing critical inputs
-    missing_critical = set(missing) & CRITICAL_INPUTS
+    critical_inputs = US_CRITICAL_INPUTS if market == "US" else TH_CRITICAL_INPUTS
+    missing_critical = set(missing) & critical_inputs
     haircut = len(missing_critical) * 10
     composite = max(0, composite - haircut)
 
@@ -269,19 +290,19 @@ def determine_exposure_ceiling(composite: float) -> int:
 
 
 def determine_recommendation(
-    composite: float, top_risk_score: Optional[int], missing_critical: int
+    composite: float, top_risk_score: Optional[int], missing_critical: int, market: str = "US"
 ) -> str:
     """Determine action recommendation."""
     # CASH_PRIORITY conditions
     if composite < 30:
         return "CASH_PRIORITY"
-    if top_risk_score is not None and top_risk_score < 25:
+    if market == "US" and top_risk_score is not None and top_risk_score < 25:
         return "CASH_PRIORITY"
 
     # REDUCE_ONLY conditions
     if composite < 50:
         return "REDUCE_ONLY"
-    if top_risk_score is not None and top_risk_score < 40:
+    if market == "US" and top_risk_score is not None and top_risk_score < 40:
         return "REDUCE_ONLY"
     if missing_critical >= 2:
         return "REDUCE_ONLY"
@@ -354,17 +375,26 @@ def determine_participation(
         return "NARROW"
 
 
-def determine_confidence(provided: list[str], missing: list[str]) -> str:
+def determine_confidence(provided: list[str], missing: list[str], market: str = "US") -> str:
     """Determine confidence level based on input completeness."""
     n_provided = len(provided)
-    missing_critical = len(set(missing) & CRITICAL_INPUTS)
+    critical_inputs = US_CRITICAL_INPUTS if market == "US" else TH_CRITICAL_INPUTS
+    missing_critical = len(set(missing) & critical_inputs)
 
-    if n_provided >= 6 and missing_critical == 0:
-        return "HIGH"
-    elif n_provided >= 4 or missing_critical <= 1:
-        return "MEDIUM"
+    if market == "TH":
+        if n_provided >= 3 and missing_critical == 0:
+            return "HIGH"
+        elif n_provided >= 2 or missing_critical <= 1:
+            return "MEDIUM"
+        else:
+            return "LOW"
     else:
-        return "LOW"
+        if n_provided >= 6 and missing_critical == 0:
+            return "HIGH"
+        elif n_provided >= 4 or missing_critical <= 1:
+            return "MEDIUM"
+        else:
+            return "LOW"
 
 
 def generate_rationale(
@@ -374,6 +404,7 @@ def generate_rationale(
     bias: str,
     scores: dict[str, Optional[int]],
     missing: list[str],
+    market: str = "US"
 ) -> str:
     """Generate human-readable rationale."""
     parts = []
@@ -402,7 +433,8 @@ def generate_rationale(
 
     # Missing inputs
     if missing:
-        critical_missing = set(missing) & CRITICAL_INPUTS
+        critical_inputs = US_CRITICAL_INPUTS if market == "US" else TH_CRITICAL_INPUTS
+        critical_missing = set(missing) & critical_inputs
         if critical_missing:
             parts.append(
                 f"Missing critical inputs ({', '.join(critical_missing)}) reduce confidence."
@@ -489,6 +521,7 @@ def main():
     parser = argparse.ArgumentParser(
         description="Calculate market exposure posture from upstream skill outputs"
     )
+    parser.add_argument("--market", choices=["US", "TH"], default="US", help="Market context")
     parser.add_argument("--breadth", type=Path, help="Path to breadth analyzer JSON")
     parser.add_argument("--uptrend", type=Path, help="Path to uptrend analyzer JSON")
     parser.add_argument("--regime", type=Path, help="Path to macro-regime-detector JSON")
@@ -531,29 +564,27 @@ def main():
         "institutional": extract_institutional_score(institutional_data),
     }
 
+    # Use explicitly passed market arg (defaults to "US")
+    market = args.market
+
     # Calculate composite
-    composite, provided, missing = calculate_composite_score(scores)
+    composite, provided, missing = calculate_composite_score(scores, market)
 
     # Determine outputs
     exposure_ceiling = determine_exposure_ceiling(composite)
-    missing_critical = len(set(missing) & CRITICAL_INPUTS)
-    recommendation = determine_recommendation(composite, scores["top_risk"], missing_critical)
+    critical_inputs = US_CRITICAL_INPUTS if market == "US" else TH_CRITICAL_INPUTS
+    missing_critical = len(set(missing) & critical_inputs)
+    recommendation = determine_recommendation(composite, scores["top_risk"], missing_critical, market)
 
     regime_name = extract_regime_name(regime_data)
     bias = determine_bias(regime_name, scores["theme"], sector_data, institutional_data)
     participation = determine_participation(scores["uptrend"], scores["breadth"], sector_data)
-    confidence = determine_confidence(provided, missing)
+    confidence = determine_confidence(provided, missing, market)
 
-    rationale = generate_rationale(composite, recommendation, participation, bias, scores, missing)
+    rationale = generate_rationale(composite, recommendation, participation, bias, scores, missing, market)
 
     # Build result
     now = datetime.now(timezone.utc)
-    # Inherit market from breadth data if available, default to US
-    market = "US"
-    if breadth_data and "metadata" in breadth_data:
-        market = breadth_data["metadata"].get("market", "US")
-    elif breadth_data:
-        market = breadth_data.get("market", "US")
 
     result = {
         "schema_version": "1.0",

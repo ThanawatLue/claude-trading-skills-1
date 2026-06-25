@@ -73,3 +73,50 @@ def test_no_api_key_raises():
     with patch.dict("os.environ", {}, clear=True):
         with pytest.raises(ValueError, match="FMP API key required"):
             fmp_price_adapter.FMPPriceAdapter(api_key=None)
+
+def test_get_daily_closes_failover():
+    """First endpoint fails, second succeeds → data from second is returned."""
+    mock_response_fail = MagicMock()
+    mock_response_fail.read.side_effect = urllib.error.URLError("First endpoint failed")
+    mock_response_fail.__enter__ = lambda s: s
+    mock_response_fail.__exit__ = MagicMock(return_value=False)
+
+    mock_response_success = MagicMock()
+    mock_response_success_data = {
+        "symbol": "AAPL",
+        "historical": [
+            {"date": "2026-03-03", "adjClose": 152.0, "close": 152.0},
+            {"date": "2026-03-02", "adjClose": 150.5, "close": 150.5},
+        ],
+    }
+    mock_response_success.read.return_value = json.dumps(mock_response_success_data).encode()
+    mock_response_success.__enter__ = lambda s: s
+    mock_response_success.__exit__ = MagicMock(return_value=False)
+
+    # Use side_effect for urlopen to return different mocks on successive calls
+    with patch("urllib.request.urlopen", side_effect=[mock_response_fail, mock_response_success]) as mock_urlopen:
+        adapter = fmp_price_adapter.FMPPriceAdapter(api_key="test_key")
+        result = adapter.get_daily_closes("AAPL", "2026-03-02", "2026-03-03")
+
+    assert len(result) == 2
+    assert result[0]["date"] == "2026-03-02"
+    assert result[1]["date"] == "2026-03-03"
+
+    # Verify urlopen was called twice with different URLs (or at least twice)
+    assert mock_urlopen.call_count == 2
+    # Check that the second call was to the v3 endpoint based on our fmp_price_adapter
+    # This assumes the order of _FMP_HIST_ENDPOINTS
+    req_second_call = mock_urlopen.call_args_list[1].args[0]
+    assert "https://financialmodelingprep.com/api/v3/" in req_second_call.full_url
+
+def test_malformed_json_response_handled_gracefully():
+    """Malformed JSON response from FMP should result in ValueError."""
+    mock_resp = MagicMock()
+    mock_resp.read.return_value = b"this is not json" # Malformed JSON
+    mock_resp.__enter__ = lambda s: s
+    mock_resp.__exit__ = MagicMock(return_value=False)
+
+    with patch("urllib.request.urlopen", return_value=mock_resp):
+        adapter = fmp_price_adapter.FMPPriceAdapter(api_key="test_key")
+        with pytest.raises(ValueError, match="FMP API response is not valid JSON"):
+            adapter.get_daily_closes("AAPL", "2026-03-01", "2026-03-03")

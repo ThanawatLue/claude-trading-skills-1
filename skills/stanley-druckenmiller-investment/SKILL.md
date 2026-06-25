@@ -11,20 +11,12 @@ Synthesize outputs from 8 upstream analysis skills (5 required + 3 optional) int
 
 ## When to Use This Skill
 
-**English:**
 - User asks "What's my overall conviction?" or "How should I be positioned?"
 - User wants a unified view synthesizing breadth, uptrend, top risk, macro, and FTD signals
 - User asks about Druckenmiller-style portfolio positioning
 - User requests strategy synthesis after running individual analysis skills
 - User asks "Should I increase or decrease exposure?"
 - User wants pattern classification (policy pivot, distortion, contrarian, wait)
-
-**Japanese:**
-- 「総合的な市場判断は？」「今のポジショニングは？」
-- ブレッドス、アップトレンド、天井リスク、マクロの統合判断
-- 「エクスポージャーを増やすべき？減らすべき？」
-- 「ドラッケンミラー分析を実行して」
-- 個別スキル実行後の戦略統合レポート
 
 ---
 

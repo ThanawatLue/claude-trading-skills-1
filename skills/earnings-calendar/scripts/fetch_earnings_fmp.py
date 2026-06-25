@@ -43,6 +43,7 @@ class FMPEarningsCalendar:
         """
         self.api_key = api_key
         self.us_only = us_only
+        self.session = requests.Session()
 
     def fetch_earnings_calendar(self, start_date: str, end_date: str) -> Optional[list[dict]]:
         """
@@ -59,7 +60,7 @@ class FMPEarningsCalendar:
         params = {"from": start_date, "to": end_date, "apikey": self.api_key}
 
         try:
-            response = requests.get(url, params=params, timeout=30)
+            response = self.session.get(url, params=params, timeout=30)
 
             if response.status_code == 401:
                 print("❌ ERROR: Invalid API key", file=sys.stderr)
@@ -108,30 +109,45 @@ class FMPEarningsCalendar:
             Dictionary mapping symbol to profile data
         """
         profiles = {}
+        if not symbols:
+            return profiles
 
-        print(f"✓ Fetching profiles for {len(symbols)} companies...", file=sys.stderr)
+        # FMP batch profile API endpoint takes comma-separated symbols
+        symbols_str = ",".join(symbols)
+        url = f"{self.BASE_URL}/profile/{symbols_str}"
+        params = {"apikey": self.api_key}
 
-        for i, symbol in enumerate(symbols):
-            url = f"{self.BASE_URL}/profile"
-            params = {"symbol": symbol, "apikey": self.api_key}
+        print(f"✓ Fetching profiles for {len(symbols)} companies (batch request)...", file=sys.stderr)
 
-            try:
-                response = requests.get(url, params=params, timeout=30)
-                response.raise_for_status()
+        try:
+            # Use self.session.get as recommended for consistency and efficiency
+            response = self.session.get(url, params=params, timeout=30)
 
-                data = response.json()
-                if isinstance(data, list) and len(data) > 0 and isinstance(data[0], dict):
-                    profiles[data[0].get("symbol")] = data[0]
+            if response.status_code == 401:
+                print("❌ ERROR: Invalid API key during profile fetch", file=sys.stderr)
+                return {}
+            if response.status_code == 429:
+                print("❌ ERROR: Rate limit exceeded during profile fetch", file=sys.stderr)
+                return {}
 
-                if (i + 1) % 50 == 0:
-                    print(f"  ✓ Fetched {i + 1}/{len(symbols)} profiles", file=sys.stderr)
+            response.raise_for_status()
+            data = response.json()
 
-            except Exception as e:
-                print(
-                    f"  ⚠️  Warning: Failed to fetch profile for {symbol}: {str(e)}",
-                    file=sys.stderr,
-                )
-                continue
+            # The batch API returns a list of profiles
+            if isinstance(data, list):
+                for profile in data:
+                    if isinstance(profile, dict) and "symbol" in profile:
+                        profiles[profile["symbol"]] = profile
+            else:
+                print(f"  ⚠️  Warning: Unexpected response format for profiles: {data}", file=sys.stderr)
+
+
+        except requests.exceptions.Timeout:
+            print("❌ ERROR: Request timeout during profile fetch. Please try again.", file=sys.stderr)
+        except requests.exceptions.ConnectionError:
+            print("❌ ERROR: Connection error during profile fetch. Check your internet connection.", file=sys.stderr)
+        except Exception as e:
+            print(f"❌ ERROR: Unexpected error during profile fetch: {str(e)}", file=sys.stderr)
 
         print(f"✓ Retrieved {len(profiles)} company profiles", file=sys.stderr)
         return profiles

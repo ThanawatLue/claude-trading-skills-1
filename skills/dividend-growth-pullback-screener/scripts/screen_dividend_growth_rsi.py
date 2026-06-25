@@ -1210,6 +1210,12 @@ Environment Variables:
         default=None,
         help="Maximum candidates to analyze (default: all, only applies to FMP-only mode)",
     )
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default=None,
+        help="Specify output directory for reports (default: project root's logs/ folder)",
+    )
 
     args = parser.parse_args()
 
@@ -1268,11 +1274,14 @@ Environment Variables:
     # Generate outputs
     today = date.today().isoformat()
 
-    # Determine output directory (project root logs/ folder)
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    # Navigate from skills/dividend-growth-pullback-screener/scripts to project root
-    project_root = os.path.dirname(os.path.dirname(os.path.dirname(script_dir)))
-    logs_dir = os.path.join(project_root, "logs")
+    # Determine output directory
+    if args.output_dir:
+        logs_dir = args.output_dir
+    else:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        # Navigate from skills/dividend-growth-pullback-screener/scripts to project root
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(script_dir)))
+        logs_dir = os.path.join(project_root, "logs")
     os.makedirs(logs_dir, exist_ok=True)
 
     # JSON output

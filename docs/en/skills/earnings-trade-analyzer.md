@@ -3,7 +3,7 @@ layout: default
 title: "Earnings Trade Analyzer"
 grand_parent: English
 parent: Skill Guides
-nav_order: 16
+nav_order: 20
 lang_peer: /ja/skills/earnings-trade-analyzer/
 permalink: /en/skills/earnings-trade-analyzer/
 ---
@@ -46,6 +46,9 @@ Analyze recent post-earnings stocks using a 5-factor scoring system (Gap Size, P
 ## 3. Prerequisites
 
 - FMP API key (set `FMP_API_KEY` environment variable or pass `--api-key`)
+  ```bash
+  export FMP_API_KEY=YOUR_API_KEY_HERE
+  ```
 - Free tier (250 calls/day) is sufficient for default screening (lookback 2 days, top 20)
 - Paid tier recommended for larger lookback windows or full screening
 
@@ -127,3 +130,4 @@ Based on grades:
 - `skills/earnings-trade-analyzer/scripts/fmp_client.py`
 - `skills/earnings-trade-analyzer/scripts/report_generator.py`
 - `skills/earnings-trade-analyzer/scripts/scorer.py`
+- `skills/earnings-trade-analyzer/scripts/yf_client.py`

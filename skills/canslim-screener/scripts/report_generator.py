@@ -24,7 +24,7 @@ def generate_json_report(results: list[dict], metadata: dict, output_file: str):
     """
     report = {"metadata": metadata, "results": results, "summary": generate_summary_stats(results)}
 
-    with open(output_file, "w") as f:
+    with open(output_file, "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2)
 
     print(f"✓ JSON report saved to: {output_file}")
@@ -120,13 +120,24 @@ def generate_markdown_report(results: list[dict], metadata: dict, output_file: s
     lines.append("---")
     lines.append("")
     lines.append("## Summary Statistics")
-    summary = generate_summary_stats(results)
+    screening_options = metadata.get("screening_options") or {}
+    market = screening_options.get("market", "US")
+    summary = generate_summary_stats(results, market=market)
     lines.append(f"- **Total Stocks Screened:** {summary['total_stocks']}")
-    lines.append(f"- **Exceptional (90+):** {summary['exceptional']} stocks")
-    lines.append(f"- **Strong (80-89):** {summary['strong']} stocks")
-    lines.append(f"- **Above Average (70-79):** {summary['above_average']} stocks")
-    lines.append(f"- **Average (60-69):** {summary['average']} stocks")
-    lines.append(f"- **Below Average (<60):** {summary['below_average']} stocks")
+    if market == "TH":
+        lines.append(f"- **Exceptional+ (85+):** {summary['exceptional+']} stocks")
+        lines.append(f"- **Exceptional (75-84):** {summary['exceptional']} stocks")
+        lines.append(f"- **Strong (65-74):** {summary['strong']} stocks")
+        lines.append(f"- **Above Average (55-64):** {summary['above_average']} stocks")
+        lines.append(f"- **Average (45-54):** {summary['average']} stocks")
+        lines.append(f"- **Below Average (<45):** {summary['below_average']} stocks")
+    else:
+        lines.append(f"- **Exceptional+ (90+):** {summary['exceptional+']} stocks")
+        lines.append(f"- **Exceptional (80-89):** {summary['exceptional']} stocks")
+        lines.append(f"- **Strong (70-79):** {summary['strong']} stocks")
+        lines.append(f"- **Above Average (60-69):** {summary['above_average']} stocks")
+        lines.append(f"- **Average (50-59):** {summary['average']} stocks")
+        lines.append(f"- **Below Average (<50):** {summary['below_average']} stocks")
     lines.append("")
 
     # Methodology note
@@ -191,7 +202,7 @@ def generate_markdown_report(results: list[dict], metadata: dict, output_file: s
     lines.append("")
 
     # Write to file
-    with open(output_file, "w") as f:
+    with open(output_file, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
 
     print(f"✓ Markdown report saved to: {output_file}")
@@ -400,26 +411,37 @@ def get_rating_emoji(score: float) -> str:
         return ""
 
 
-def generate_summary_stats(results: list[dict]) -> dict:
+def generate_summary_stats(results: list[dict], market: str = "US") -> dict:
     """
     Generate summary statistics for results
 
     Args:
         results: List of analyzed stocks
+        market: Target market ("US" or "TH")
 
     Returns:
         Dict with summary statistics
     """
     total = len(results)
 
-    exceptional = sum(1 for s in results if s["composite_score"] >= 90)
-    strong = sum(1 for s in results if 80 <= s["composite_score"] < 90)
-    above_avg = sum(1 for s in results if 70 <= s["composite_score"] < 80)
-    average = sum(1 for s in results if 60 <= s["composite_score"] < 70)
-    below_avg = sum(1 for s in results if s["composite_score"] < 60)
+    if market == "TH":
+        exceptional_plus = sum(1 for s in results if s["composite_score"] >= 85)
+        exceptional = sum(1 for s in results if 75 <= s["composite_score"] < 85)
+        strong = sum(1 for s in results if 65 <= s["composite_score"] < 75)
+        above_avg = sum(1 for s in results if 55 <= s["composite_score"] < 65)
+        average = sum(1 for s in results if 45 <= s["composite_score"] < 55)
+        below_avg = sum(1 for s in results if s["composite_score"] < 45)
+    else:
+        exceptional_plus = sum(1 for s in results if s["composite_score"] >= 90)
+        exceptional = sum(1 for s in results if 80 <= s["composite_score"] < 90)
+        strong = sum(1 for s in results if 70 <= s["composite_score"] < 80)
+        above_avg = sum(1 for s in results if 60 <= s["composite_score"] < 70)
+        average = sum(1 for s in results if 50 <= s["composite_score"] < 60)
+        below_avg = sum(1 for s in results if s["composite_score"] < 50)
 
     return {
         "total_stocks": total,
+        "exceptional+": exceptional_plus,
         "exceptional": exceptional,
         "strong": strong,
         "above_average": above_avg,

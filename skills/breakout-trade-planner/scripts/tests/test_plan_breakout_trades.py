@@ -93,29 +93,44 @@ def _make_input_data(results: list[dict]) -> dict:
 
 class TestLoadInput:
     def test_missing_schema_version_raises(self):
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+        f = tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False)
+        try:
             json.dump({"results": []}, f)
-            f.flush()
+            f.close()
             with pytest.raises(ValueError, match="schema_version"):
                 load_input(f.name)
-            os.unlink(f.name)
+        finally:
+            try:
+                os.unlink(f.name)
+            except OSError:
+                pass
 
     def test_wrong_schema_version_raises(self):
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+        f = tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False)
+        try:
             json.dump({"schema_version": "99.0", "results": []}, f)
-            f.flush()
+            f.close()
             with pytest.raises(ValueError, match="Unsupported"):
                 load_input(f.name)
-            os.unlink(f.name)
+        finally:
+            try:
+                os.unlink(f.name)
+            except OSError:
+                pass
 
     def test_valid_input_loads(self):
         data = _make_input_data([_make_vcp_result()])
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+        f = tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False)
+        try:
             json.dump(data, f)
-            f.flush()
+            f.close()
             loaded = load_input(f.name)
             assert len(loaded["results"]) == 1
-            os.unlink(f.name)
+        finally:
+            try:
+                os.unlink(f.name)
+            except OSError:
+                pass
 
 
 class TestValidateResult:

@@ -3,7 +3,7 @@ layout: default
 title: "Market Environment Analysis"
 grand_parent: English
 parent: Skill Guides
-nav_order: 30
+nav_order: 39
 lang_peer: /ja/skills/market-environment-analysis/
 permalink: /en/skills/market-environment-analysis/
 ---
@@ -34,14 +34,26 @@ Comprehensive market environment analysis and reporting tool. Analyzes global ma
 
 ---
 
-## 2. Prerequisites
+## 2. When to Use
 
-- **API Key:** None required
-- **Python 3.9+** recommended
+- When you need a comprehensive overview of global market conditions
+- Before making trading or investment decisions
+- For daily/weekly market briefings
+- When assessing risk-on/risk-off sentiment
+- For understanding inter-market correlations and sector rotation
+- When preparing market reports for clients or personal records
 
 ---
 
-## 3. Quick Start
+## 3. Prerequisites
+
+- **WebSearch access**: Required for fetching real-time market data
+- **No API keys required**: This skill uses web search for data collection
+- **Optional**: Economic calendar data for event-driven analysis
+
+---
+
+## 4. Quick Start
 
 ```bash
 1. Executive Summary (3-5 key points)
@@ -57,10 +69,12 @@ Comprehensive market environment analysis and reporting tool. Analyzes global ma
 
 ---
 
-## 4. Workflow
+## 5. Workflow
 
-### 1. Initial Data Collection
-Collect latest market data using web_search tool:
+The agent orchestrates the market analysis workflow, utilizing the `web_search` tool for initial data collection and `market_utils.py` for processing and reporting.
+
+### 1. Initial Data Collection (Orchestrated by Agent via `web_search`)
+The agent will collect the latest market data by performing targeted web searches for:
 1. Major stock indices (S&P 500, NASDAQ, Dow, Nikkei 225, Shanghai Composite, Hang Seng)
 2. Forex rates (USD/JPY, EUR/USD, major currency pairs)
 3. Commodity prices (WTI crude, Gold, Silver)
@@ -68,8 +82,8 @@ Collect latest market data using web_search tool:
 5. VIX index (Fear gauge)
 6. Market trading status (open/close/current values)
 
-### 2. Market Environment Assessment
-Evaluate the following from collected data:
+### 2. Market Environment Assessment (Utilizing `market_utils.py` helper functions)
+After data collection, the agent will use helper functions from `market_utils.py` to evaluate the following:
 - **Trend Direction**: Uptrend/Downtrend/Range-bound
 - **Risk Sentiment**: Risk-on/Risk-off
 - **Volatility Status**: Market anxiety level from VIX
@@ -92,7 +106,7 @@ Evaluate the following from collected data:
 
 ---
 
-## 5. Resources
+## 6. Resources
 
 **References:**
 

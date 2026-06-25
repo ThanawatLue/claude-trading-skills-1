@@ -3,7 +3,7 @@ layout: default
 title: "Market Top Detector"
 grand_parent: English
 parent: Skill Guides
-nav_order: 31
+nav_order: 41
 lang_peer: /ja/skills/market-top-detector/
 permalink: /en/skills/market-top-detector/
 ---
@@ -36,7 +36,6 @@ Detects market top probability using O'Neil Distribution Days, Minervini Leading
 
 ## 2. When to Use
 
-**English:**
 - User asks "Is the market topping?" or "Are we near a top?"
 - User notices distribution days accumulating
 - User observes defensive sectors outperforming growth
@@ -44,13 +43,19 @@ Detects market top probability using O'Neil Distribution Days, Minervini Leading
 - User asks about reducing equity exposure timing
 - User wants to assess correction probability for the next 2-8 weeks
 
-
 ---
 
 ## 3. Prerequisites
 
-- **API Key:** None required
-- **Python 3.9+** recommended
+**Required:**
+- **FMP API Key:** Set `$FMP_API_KEY` environment variable or pass `--api-key`. Free tier sufficient (~33 API calls per execution).
+- **WebSearch Access:** Required to collect S&P 500 breadth (50DMA %) and CBOE Put/Call ratio data.
+
+**Optional:**
+- **Margin Debt Data:** Enhances sentiment scoring but typically 1-2 months lagged.
+- **VIX Term Structure:** Auto-detected from FMP API if VIX3M quote available; manual override via `--vix-term`.
+
+**Data Freshness:** All manually collected data should be from the most recent 3 business days for accurate analysis.
 
 ---
 
@@ -190,3 +195,4 @@ Present the generated Markdown report to the user, highlighting:
 - `skills/market-top-detector/scripts/scenario_engine.py`
 - `skills/market-top-detector/scripts/scorer.py`
 - `skills/market-top-detector/scripts/utils.py`
+- `skills/market-top-detector/scripts/yf_client.py`

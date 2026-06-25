@@ -10,6 +10,7 @@ import argparse
 import json
 import os
 import sys
+import re
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
@@ -174,12 +175,54 @@ def create_postmortem_record(
     }
 
 
+def get_macro_regime(target_date_str: str, reports_dir: Path) -> str:
+    """
+    Fetches the macro regime from the latest report on or before the target_date.
+    Assumes reports are in reports_dir/macro_regime/macro_regime_YYYY-MM-DD_HHMMSS.json
+    """
+    macro_regime_dir = reports_dir / "macro_regime"
+    if not macro_regime_dir.exists():
+        return "UNKNOWN"
+
+    target_dt = datetime.strptime(target_date_str, "%Y-%m-%d")
+    latest_regime_date = None
+    latest_regime = "UNKNOWN"
+
+    for json_file in macro_regime_dir.glob("macro_regime_*.json"):
+        match = re.search(r"macro_regime_(\d{4}-\d{2}-\d{2})_\d{6}\.json", json_file.name)
+        if match:
+            file_date_str = match.group(1)
+            try:
+                file_dt = datetime.strptime(file_date_str, "%Y-%m-%d")
+                if file_dt <= target_dt:
+                    if latest_regime_date is None or file_dt > latest_regime_date:
+                        try:
+                            with open(json_file) as f:
+                                data = json.load(f)
+                                regime = data.get("regime", "UNKNOWN")
+                                if regime != "UNKNOWN":  # Only update if a valid regime is found
+                                    latest_regime = regime
+                                    latest_regime_date = file_dt
+                        except (json.JSONDecodeError, KeyError) as e:
+                            print(
+                                f"Warning: Error reading macro regime file {json_file.name}: {e}",
+                                file=sys.stderr,
+                            )
+            except ValueError:
+                print(
+                    f"Warning: Could not parse date from macro regime file name: {json_file.name}",
+                    file=sys.stderr,
+                )
+    return latest_regime
+
+
 def process_signal(
     signal: dict,
     holding_periods: list,
     api_key: Optional[str] = None,
     manual_exit_price: Optional[float] = None,
     manual_exit_date: Optional[str] = None,
+    reports_dir: Optional[Path] = None,
 ) -> Optional[dict]:
     """
     Process a single signal and create postmortem record.
@@ -247,7 +290,12 @@ def process_signal(
     if exit_date is None:
         exit_date = (sig_dt + timedelta(days=holding_periods[0])).strftime("%Y-%m-%d")
 
-    return create_postmortem_record(signal, realized_returns, exit_price, exit_date)
+    # Determine regime at exit
+    regime_at_exit = "UNKNOWN"
+    if reports_dir and exit_date: # Only attempt if reports_dir is provided
+        regime_at_exit = get_macro_regime(exit_date, reports_dir)
+
+    return create_postmortem_record(signal, realized_returns, exit_price, exit_date, regime_at_exit=regime_at_exit)
 
 
 def list_ready_signals(signals_dir: str, min_days: int = 5) -> list:
@@ -346,20 +394,37 @@ def main():
             )
             sys.exit(1)
 
+        import re
         # Create minimal signal record
+        ticker = "UNKNOWN"
+        signal_date_str = datetime.now().strftime("%Y-%m-%d")
+        match = re.search(r"sig_([A-Z0-9\.]+)_(\d{8})_.*", args.signal_id, re.IGNORECASE)
+        if match:
+            ticker = match.group(1).upper()
+            signal_date_raw = match.group(2) # YYYYMMDD format
+            try:
+                signal_date_str = datetime.strptime(signal_date_raw, "%Y%m%d").strftime("%Y-%m-%d")
+            except ValueError:
+                print(f"Warning: Could not parse date from signal_id: {signal_date_raw}. Using current date.", file=sys.stderr)
+
         signal = {
             "signal_id": args.signal_id,
-            "ticker": args.signal_id.split("_")[1] if "_" in args.signal_id else "UNKNOWN",
-            "signal_date": args.signal_id.split("_")[2]
-            if args.signal_id.count("_") >= 2
-            else datetime.now().strftime("%Y-%m-%d"),
+            "ticker": ticker,
+            "signal_date": signal_date_str,
             "predicted_direction": "LONG",
             "source_skill": "manual",
             "entry_price": 0.0,
         }
 
+        # Determine regime at exit for manual recording
+        regime_at_exit_manual = "UNKNOWN"
+        if output_dir and args.exit_date:
+            regime_at_exit_manual = get_macro_regime(args.exit_date, output_dir)
+
         postmortem = create_postmortem_record(
-            signal, {}, args.exit_price, args.exit_date, outcome_notes=args.outcome_notes
+            signal, {}, args.exit_price, args.exit_date,
+            regime_at_exit=regime_at_exit_manual,
+            outcome_notes=args.outcome_notes
         )
 
         # Save postmortem
@@ -396,7 +461,7 @@ def main():
     # Process signals
     results = []
     for signal in signals:
-        postmortem = process_signal(signal, holding_periods, api_key)
+        postmortem = process_signal(signal, holding_periods, api_key, reports_dir=output_dir)
         if postmortem:
             results.append(postmortem)
 

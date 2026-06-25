@@ -47,7 +47,7 @@ def calculate_trend_template(
             "error": "Insufficient historical data (need 50+ days)",
         }
 
-    closes = [d.get("close", d.get("adjClose", 0)) for d in historical_prices]
+    closes = [float(d.get("close") or d.get("adjClose") or 0) for d in historical_prices]
     price = quote_data.get("price", closes[0] if closes else 0)
     year_high = quote_data.get("yearHigh", 0)
     year_low = quote_data.get("yearLow", 0)

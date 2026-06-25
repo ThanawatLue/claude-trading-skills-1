@@ -25,6 +25,30 @@ from typing import Optional
 # Ensure scripts directory is on the path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# Load INDUSTRY_TO_SECTOR mapping from external JSON file
+INDUSTRY_TO_SECTOR: dict[str, str] = {}
+_config_path = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "config", "industry_to_sector.json"
+)
+try:
+    with open(_config_path, "r") as f:
+        INDUSTRY_TO_SECTOR = json.load(f)
+except FileNotFoundError:
+    print(
+        f"ERROR: industry_to_sector.json not found at {_config_path}. "
+        "Please ensure the config file exists.",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+except json.JSONDecodeError:
+    print(
+        f"ERROR: Could not decode industry_to_sector.json at {_config_path}. "
+        "Ensure it is valid JSON.",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
+
 from calculators.heat_calculator import (
     breadth_signal_score,
     calculate_theme_heat,
@@ -50,177 +74,64 @@ from scorer import (
     score_theme,
 )
 
-# Heavy-dependency modules (pandas/numpy/yfinance/finvizfinance) are imported
-# lazily inside main() to allow lightweight helpers like _get_representative_stocks
-# to be imported without triggering sys.exit(1) when pandas is absent.
-
 
 # ---------------------------------------------------------------------------
-# Industry-to-sector mapping (FINVIZ industry names -> sector)
+# CLI argument parsing
 # ---------------------------------------------------------------------------
-INDUSTRY_TO_SECTOR: dict[str, str] = {
-    # Technology
-    "Semiconductors": "Technology",
-    "Semiconductor Equipment & Materials": "Technology",
-    "Software - Application": "Technology",
-    "Software - Infrastructure": "Technology",
-    "Information Technology Services": "Technology",
-    "Computer Hardware": "Technology",
-    "Electronic Components": "Technology",
-    "Electronics & Computer Distribution": "Technology",
-    "Scientific & Technical Instruments": "Technology",
-    "Communication Equipment": "Technology",
-    "Consumer Electronics": "Technology",
-    # Healthcare
-    "Biotechnology": "Healthcare",
-    "Drug Manufacturers - General": "Healthcare",
-    "Drug Manufacturers - Specialty & Generic": "Healthcare",
-    "Medical Devices": "Healthcare",
-    "Medical Instruments & Supplies": "Healthcare",
-    "Diagnostics & Research": "Healthcare",
-    "Healthcare Plans": "Healthcare",
-    "Health Information Services": "Healthcare",
-    "Medical Care Facilities": "Healthcare",
-    "Pharmaceutical Retailers": "Healthcare",
-    "Medical Distribution": "Healthcare",
-    # Financial
-    "Banks - Diversified": "Financial",
-    "Banks - Regional": "Financial",
-    "Insurance - Life": "Financial",
-    "Insurance - Property & Casualty": "Financial",
-    "Insurance - Diversified": "Financial",
-    "Insurance - Specialty": "Financial",
-    "Insurance Brokers": "Financial",
-    "Asset Management": "Financial",
-    "Capital Markets": "Financial",
-    "Financial Data & Stock Exchanges": "Financial",
-    "Credit Services": "Financial",
-    "Mortgage Finance": "Financial",
-    "Financial Conglomerates": "Financial",
-    "Shell Companies": "Financial",
-    # Consumer Cyclical
-    "Auto Manufacturers": "Consumer Cyclical",
-    "Auto Parts": "Consumer Cyclical",
-    "Auto & Truck Dealerships": "Consumer Cyclical",
-    "Recreational Vehicles": "Consumer Cyclical",
-    "Furnishings, Fixtures & Appliances": "Consumer Cyclical",
-    "Residential Construction": "Consumer Cyclical",
-    "Textile Manufacturing": "Consumer Cyclical",
-    "Apparel Manufacturing": "Consumer Cyclical",
-    "Footwear & Accessories": "Consumer Cyclical",
-    "Packaging & Containers": "Consumer Cyclical",
-    "Personal Services": "Consumer Cyclical",
-    "Restaurants": "Consumer Cyclical",
-    "Apparel Retail": "Consumer Cyclical",
-    "Department Stores": "Consumer Cyclical",
-    "Home Improvement Retail": "Consumer Cyclical",
-    "Luxury Goods": "Consumer Cyclical",
-    "Internet Retail": "Consumer Cyclical",
-    "Specialty Retail": "Consumer Cyclical",
-    "Gambling": "Consumer Cyclical",
-    "Leisure": "Consumer Cyclical",
-    "Lodging": "Consumer Cyclical",
-    "Resorts & Casinos": "Consumer Cyclical",
-    "Travel Services": "Consumer Cyclical",
-    # Consumer Defensive
-    "Beverages - Non-Alcoholic": "Consumer Defensive",
-    "Beverages - Brewers": "Consumer Defensive",
-    "Beverages - Wineries & Distilleries": "Consumer Defensive",
-    "Confectioners": "Consumer Defensive",
-    "Farm Products": "Consumer Defensive",
-    "Household & Personal Products": "Consumer Defensive",
-    "Packaged Foods": "Consumer Defensive",
-    "Education & Training Services": "Consumer Defensive",
-    "Discount Stores": "Consumer Defensive",
-    "Food Distribution": "Consumer Defensive",
-    "Grocery Stores": "Consumer Defensive",
-    "Tobacco": "Consumer Defensive",
-    # Industrials
-    "Aerospace & Defense": "Industrials",
-    "Airlines": "Industrials",
-    "Building Products & Equipment": "Industrials",
-    "Business Equipment & Supplies": "Industrials",
-    "Conglomerates": "Industrials",
-    "Consulting Services": "Industrials",
-    "Electrical Equipment & Parts": "Industrials",
-    "Engineering & Construction": "Industrials",
-    "Farm & Heavy Construction Machinery": "Industrials",
-    "Industrial Distribution": "Industrials",
-    "Infrastructure Operations": "Industrials",
-    "Integrated Freight & Logistics": "Industrials",
-    "Marine Shipping": "Industrials",
-    "Metal Fabrication": "Industrials",
-    "Pollution & Treatment Controls": "Industrials",
-    "Railroads": "Industrials",
-    "Rental & Leasing Services": "Industrials",
-    "Security & Protection Services": "Industrials",
-    "Specialty Business Services": "Industrials",
-    "Specialty Industrial Machinery": "Industrials",
-    "Staffing & Employment Services": "Industrials",
-    "Tools & Accessories": "Industrials",
-    "Trucking": "Industrials",
-    "Waste Management": "Industrials",
-    # Energy
-    "Oil & Gas E&P": "Energy",
-    "Oil & Gas Equipment & Services": "Energy",
-    "Oil & Gas Integrated": "Energy",
-    "Oil & Gas Midstream": "Energy",
-    "Oil & Gas Refining & Marketing": "Energy",
-    "Oil & Gas Drilling": "Energy",
-    "Thermal Coal": "Energy",
-    "Uranium": "Energy",
-    "Solar": "Energy",
-    # Basic Materials
-    "Gold": "Basic Materials",
-    "Silver": "Basic Materials",
-    "Aluminum": "Basic Materials",
-    "Copper": "Basic Materials",
-    "Steel": "Basic Materials",
-    "Other Industrial Metals & Mining": "Basic Materials",
-    "Other Precious Metals & Mining": "Basic Materials",
-    "Coking Coal": "Basic Materials",
-    "Lumber & Wood Production": "Basic Materials",
-    "Paper & Paper Products": "Basic Materials",
-    "Chemicals": "Basic Materials",
-    "Specialty Chemicals": "Basic Materials",
-    "Agricultural Inputs": "Basic Materials",
-    "Building Materials": "Basic Materials",
-    # Communication Services
-    "Telecom Services": "Communication Services",
-    "Advertising Agencies": "Communication Services",
-    "Publishing": "Communication Services",
-    "Broadcasting": "Communication Services",
-    "Entertainment": "Communication Services",
-    "Internet Content & Information": "Communication Services",
-    "Electronic Gaming & Multimedia": "Communication Services",
-    # Real Estate
-    "REIT - Diversified": "Real Estate",
-    "REIT - Healthcare Facilities": "Real Estate",
-    "REIT - Hotel & Motel": "Real Estate",
-    "REIT - Industrial": "Real Estate",
-    "REIT - Mortgage": "Real Estate",
-    "REIT - Office": "Real Estate",
-    "REIT - Residential": "Real Estate",
-    "REIT - Retail": "Real Estate",
-    "REIT - Specialty": "Real Estate",
-    "Real Estate - Development": "Real Estate",
-    "Real Estate - Diversified": "Real Estate",
-    "Real Estate Services": "Real Estate",
-    # Utilities
-    "Utilities - Diversified": "Utilities",
-    "Utilities - Independent Power Producers": "Utilities",
-    "Utilities - Regulated Electric": "Utilities",
-    "Utilities - Regulated Gas": "Utilities",
-    "Utilities - Regulated Water": "Utilities",
-    "Utilities - Renewable": "Utilities",
-}
-
-
-# ---------------------------------------------------------------------------
-# Theme configuration is loaded from YAML / inline fallback via config_loader.
-# DEFAULT_THEMES_CONFIG and ETF_CATALOG live in default_theme_config.py
-# to avoid circular imports.
-# ---------------------------------------------------------------------------
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Detect trending market themes from FINVIZ industry data"
+    )
+    parser.add_argument(
+        "--fmp-api-key",
+        default=os.environ.get("FMP_API_KEY"),
+        help="Financial Modeling Prep API key (env: FMP_API_KEY)",
+    )
+    parser.add_argument(
+        "--finviz-api-key",
+        default=os.environ.get("FINVIZ_API_KEY"),
+        help="FINVIZ Elite API key (env: FINVIZ_API_KEY)",
+    )
+    parser.add_argument(
+        "--finviz-mode",
+        choices=["public", "elite"],
+        default=None,
+        help="FINVIZ mode (auto-detected if not specified)",
+    )
+    parser.add_argument(
+        "--output-dir",
+        default="reports/",
+        help="Output directory for reports (default: reports/)",
+    )
+    parser.add_argument(
+        "--top",
+        type=int,
+        default=3,
+        help="Number of top themes to show in detail (default: 3)",
+    )
+    parser.add_argument(
+        "--max-themes",
+        type=int,
+        default=10,
+        help="Maximum themes to analyze (default: 10)",
+    )
+    parser.add_argument(
+        "--max-stocks-per-theme",
+        type=int,
+        default=10,
+        help="Maximum stocks per theme (default: 10)",
+    )
+    parser.add_argument(
+        "--themes-config",
+        default=None,
+        help="Path to custom themes.yaml (default: bundled)",
+    )
+    parser.add_argument(
+        "--discover-themes",
+        action="store_true",
+        default=False,
+        help="Enable automatic theme discovery for unmatched industries",
+)
 
 
 # ---------------------------------------------------------------------------
@@ -298,6 +209,7 @@ def parse_args() -> argparse.Namespace:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 def _add_sector_info(industries: list[dict]) -> list[dict]:
     """Add sector field to each industry dict from INDUSTRY_TO_SECTOR mapping."""
     for ind in industries:

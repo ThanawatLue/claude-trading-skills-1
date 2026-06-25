@@ -24,8 +24,10 @@ Comprehensive analysis tool for understanding market conditions and creating pro
 
 ## Core Workflow
 
-### 1. Initial Data Collection
-Collect latest market data using web_search tool:
+The agent orchestrates the market analysis workflow, utilizing the `web_search` tool for initial data collection and `market_utils.py` for processing and reporting.
+
+### 1. Initial Data Collection (Orchestrated by Agent via `web_search`)
+The agent will collect the latest market data by performing targeted web searches for:
 1. Major stock indices (S&P 500, NASDAQ, Dow, Nikkei 225, Shanghai Composite, Hang Seng)
 2. Forex rates (USD/JPY, EUR/USD, major currency pairs)
 3. Commodity prices (WTI crude, Gold, Silver)
@@ -33,8 +35,8 @@ Collect latest market data using web_search tool:
 5. VIX index (Fear gauge)
 6. Market trading status (open/close/current values)
 
-### 2. Market Environment Assessment
-Evaluate the following from collected data:
+### 2. Market Environment Assessment (Utilizing `market_utils.py` helper functions)
+After data collection, the agent will use helper functions from `market_utils.py` to evaluate the following:
 - **Trend Direction**: Uptrend/Downtrend/Range-bound
 - **Risk Sentiment**: Risk-on/Risk-off
 - **Volatility Status**: Market anxiety level from VIX

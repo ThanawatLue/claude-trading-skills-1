@@ -53,8 +53,6 @@ where:
 |------------|---------|----------|
 | `false_positive_cluster` | >15% FP rate with 20+ samples | MEDIUM-HIGH |
 | `regime_sensitivity` | >25% regime mismatch rate | MEDIUM |
-| `sector_blind_spot` | >20% FP rate in specific sector | MEDIUM |
-| `timing_drift` | Accuracy degraded >10% over 30 days | LOW-MEDIUM |
 | `overconfidence` | High-confidence signals underperforming | HIGH |
 
 **Backlog Entry Format**:
@@ -67,7 +65,6 @@ where:
     false_positive_rate: 0.18
     sample_size: 45
     regime_correlation: RISK_OFF
-    sector_correlation: Technology
   suggested_action: "Add RISK_OFF regime filter or reduce confidence"
   priority_score: 72  # Calculated from severity * sample_size * impact
   generated_by: signal-postmortem
@@ -86,7 +83,7 @@ where:
 
 - Weight feedback regenerated daily at 06:00
 - Improvement backlog updated with new entries
-- Old entries marked as `addressed` when improvements deployed
+- Old entries marked as `addressed` by a downstream skill improvement loop agent when improvements are deployed. `postmortem_analyzer.py` does not manage this status directly.
 
 ### Weekly Review
 
@@ -149,7 +146,7 @@ To avoid noisy feedback from small samples:
 | Weight adjustment | 20 signals |
 | Backlog entry | 15 signals |
 | Summary statistics | 10 signals |
-| Regime correlation | 10 signals per regime |
+| Regime correlation | 5 signals per regime |
 
 ## Manual Override Integration
 

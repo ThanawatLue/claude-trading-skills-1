@@ -1,22 +1,22 @@
-# Bubble Detection Quick Reference
+# Bubble Detection Quick Reference (English)
 
-## Daily Checklist (Complete in 5 Minutes)
+## Daily Checklist (5 minutes)
 
 ### Morning Routine (Before Market Open)
 
 ```
-□ Step 1: Update Bubble-O-Meter (2 minutes)
-   - Score 8 indicators on 0-2 scale
-   - Confirm risk budget based on total score
+□ Step 1: Update Bubble-O-Meter (2 min)
+   - Score 8 indicators (0-2 points each)
+   - Check risk budget based on total score
 
-□ Step 2: Position Management (2 minutes)
+□ Step 2: Position Management (2 min)
    - Update ATR trailing stops
-   - Check if stair-step profit-taking targets reached
-   - Determine new entry eligibility
+   - Check stair-step profit targets
+   - Evaluate new entry eligibility
 
-□ Step 3: Signal Confirmation (1 minute)
-   - Media/social media trends (Google Trends, Twitter)
-   - Major indices' distance from 52-week highs
+□ Step 3: Signal Check (1 min)
+   - Media/Social trends (Google Trends, Twitter)
+   - Major indices distance from 52-week highs
    - VIX & Put/Call ratio
 ```
 
@@ -24,112 +24,285 @@
 
 ## Emergency Assessment: 3 Questions
 
-When uncertain about investment decisions, answer these 3 questions:
+When uncertain about an investment decision, answer these 3 questions:
 
-### Q1: "Are non-investors recommending?"
+### Q1: "Are non-investors recommending it?"
 - YES → Mass penetration complete, likely late stage
-- NO → Still early-to-mid stage
+- NO → Still early to mid stage
 
 ### Q2: "Has the narrative become 'common sense'?"
-- YES → Euphoria stage, dissent socially unacceptable
-- NO → Skeptical views still tolerated, healthy state
+- YES → Euphoria stage, contrarian views socially unacceptable
+- NO → Healthy skepticism still functions
 
-### Q3: "Is 'this time is different' the mantra?"
-- YES → Historically typical bubble sign
-- NO → Healthy caution still functioning
+### Q3: "Is 'this time is different' the catchphrase?"
+- YES → Classic historical bubble signal
+- NO → Healthy caution still present
 
 **All 3 YES → Critical zone, prioritize profit-taking/exit**
 
 ---
 
-## Action Matrix by Bubble Stage (REVISED v2.1)
+## Action Matrix by Bubble Phase
 
-| Phase | Score | Risk Budget | Entry | Profit-Taking | Stop | Shorts |
-|-------|-------|------------|-------|--------------|------|--------|
+| Phase | Score | Risk Budget | Entry | Profit-Taking | Stop | Short |
+|-------|-------|------------|-------|---------------|------|-------|
 | **Normal** | 0-4 | 100% | Normal | At target | 2.0 ATR | No |
-| **Caution** | 5-7 | 70-80% | 50% reduced | 25% at +20% | 1.8 ATR | No |
-| **Elevated Risk** | 8-9 | 50-70% | Selective | 40% at +20% | 1.6 ATR | Consider |
-| **Euphoria** | 10-12 | 40-50% | Stop | 50% at +20% | 1.5 ATR | After conditions |
-| **Critical** | 13-15 | 20-30% | Stop | 75-100% immediate | 1.2 ATR | Recommended |
-
-**Note**: Maximum score reduced from 16 to 15 points (Phase 2: max 12, Phase 3: max 3)
+| **Caution** | 5-8 | 70% | 50% reduced | 25% at +20% | 1.8 ATR | No |
+| **Euphoria** | 9-12 | 40% | Stopped | 50% at +20% | 1.5 ATR | After confirm |
+| **Critical** | 13-16 | 20% | Stopped | 75-100% now | 1.2 ATR | Recommended |
 
 ---
 
-## Quick Scoring for 8 Indicators
+## 8 Indicators Quick Scoring
 
 ### 1. Mass Penetration
 ```
-0 points: Investors only
-1 point: General awareness but investment still limited
-2 points: Taxi drivers/family recommending
+0 pts: Investors only
+1 pt: General awareness but investment limited
+2 pts: Taxi drivers/family recommending
 ```
 
 ### 2. Media Saturation
 ```
-0 points: Normal coverage level
-1 point: Search trends 2-3x
-2 points: TV specials/magazine covers, searches 5x+
+0 pts: Normal coverage
+1 pt: Search trends 2-3x normal
+2 pts: TV specials/magazine covers, 5x+ search spike
 ```
 
-### 3. New Entrants
+### 3. New Accounts & Inflows
 ```
-0 points: Normal account opening pace
-1 point: 50-100% YoY increase
-2 points: 200%+ YoY, beginner flood
-```
-
-### 4. Issuance Flood
-```
-0 points: Normal IPO count
-1 point: 50% increase in IPOs/related products
-2 points: Low-quality IPOs, theme ETF proliferation
+0 pts: Normal account openings
+1 pt: 50-100% YoY increase
+2 pts: 200%+ YoY, first-time investor flood
 ```
 
-### 5. Leverage
+### 4. New Issuance Flood
 ```
-0 points: Normal range
-1 point: Margin balance 1.5x
-2 points: All-time high, funding rates elevated
+0 pts: Normal IPO volume
+1 pt: IPO/SPAC/ETFs up 50%+
+2 pts: Low-quality IPO flood, "theme" fund proliferation
+```
+
+### 5. Leverage Indicators
+```
+0 pts: Margin debt in normal range
+1 pt: Margin debt 1.5x average
+2 pts: All-time high margin, funding rates elevated, extreme positioning
 ```
 
 ### 6. Price Acceleration
 ```
-0 points: Near historical median
-1 point: Exceeds 90th percentile
-2 points: 95-99th percentile or accelerating
+0 pts: Annualized returns near historical median
+1 pt: Returns exceed 90th percentile
+2 pts: Returns at 95-99th percentile, or positive second derivative
 ```
 
 ### 7. Valuation Disconnect
 ```
-0 points: Explainable by fundamentals
-1 point: High valuation but explained by growth expectations
-2 points: Completely "narrative"-dependent, fundamentals ignored
+0 pts: Fundamentally explainable
+1 pt: High valuation but "growth expectations" provide cover
+2 pts: Pure "narrative" dependent, fundamentals ignored
 ```
 
-### 8. Correlation & Breadth
+### 8. Breadth & Correlation
 ```
-0 points: Only some leaders rising
-1 point: Sector-wide spread
-2 points: Even low-quality/zombie companies rallying
+0 pts: Only leader stocks rising
+1 pt: Sector-wide participation
+2 pts: Low-quality/zombie companies rising (last buyers in)
 ```
+
+---
+
+## Profit-Taking Strategy Templates
+
+### Template 1: Stair-Step (Conservative)
+
+```
+Position: $10,000 initial investment
+Targets: +20%, +40%, +60%, +80%
+
++20% ($12,000) → Sell 25% = $3,000 secured
++40% ($14,000) → Sell 25% = $3,500 secured
++60% ($16,000) → Sell 25% = $4,000 secured
++80% ($18,000) → Sell 25% = $4,500 secured
+
+Total profit secured: $15,000 (+50% equivalent)
+```
+
+### Template 2: ATR Trailing (Aggressive)
+
+```python
+def calculate_trailing_stop(current_price, atr_20d, bubble_phase):
+    """
+    Calculate trailing stop based on bubble phase
+
+    bubble_phase: 'normal', 'caution', 'euphoria', 'critical'
+    """
+    multipliers = {
+        'normal': 2.0,
+        'caution': 1.8,
+        'euphoria': 1.5,
+        'critical': 1.2
+    }
+    multiplier = multipliers.get(bubble_phase, 2.0)
+    stop_price = current_price - (atr_20d * multiplier)
+    return stop_price
+```
+
+### Template 3: Hybrid (Recommended)
+
+```
+Stage 1 (Boom):
+  → Stair-step reduces 50% of position
+
+Stage 2 (Euphoria):
+  → Apply ATR trailing to remaining 50%, ride upside
+
+Stage 3 (Panic signals):
+  → Exit immediately when ATR stop hit
+```
+
+---
+
+## Short-Selling Timing Decision (Critical)
+
+### ❌ Absolutely Avoid: Early Contrarian
+
+```
+Reason: Often 2-3x further rise after "obviously too high"
+Risk: "Markets can remain irrational longer than you can remain solvent"
+```
+
+### ✅ Recommended: After Composite Conditions Met
+
+**Need at least 3 of 7 conditions before considering:**
+
+1. □ Weekly chart shows clear lower highs
+2. □ Volume peaked out (3 weeks declining)
+3. □ Leverage metrics drop sharply (margin debt -20%+)
+4. □ Media/search trends peaked out
+5. □ Weak stocks in sector breaking down first
+6. □ VIX spike (+30%+)
+7. □ Fed or policy reversal signals
+
+**Execution example:**
+
+```
+Conditions check:
+[✓] 1. Weekly lower highs
+[✓] 2. Volume declining 3 weeks
+[×] 3. Margin debt still elevated
+[✓] 4. Google trends -40%
+[×] 5. Still broad rally
+[✓] 6. VIX +35% spike
+[×] 7. No policy change
+
+→ 4/7 met, short consideration OK
+→ Small size (25% of normal) test entry
+```
+
+---
+
+## Common Failure Patterns & Solutions
+
+### Failure 1: "Too late" mentality, perpetual waiting
+
+**Psychology:** Regret aversion (FOMO about missing out)
+**Solution:**
+- Run Bubble-O-Meter when feeling too late
+- If score ≤8, small entry OK
+- If score ≥9, correct to wait
+
+### Failure 2: Re-entry after taking profits (buying high)
+
+**Psychology:** Hindsight bias ("I knew it would go up")
+**Solution:**
+- 72-hour re-entry ban after profit-taking
+- Re-entry only after Bubble-O-Meter check
+
+### Failure 3: "Still going up" paralysis on profit-taking
+
+**Psychology:** Greed + Overconfidence
+**Solution:**
+- Automate stair-step (preset limit orders)
+- Target "satisfaction" not "perfection"
+
+### Failure 4: Premature short selling
+
+**Psychology:** Subjective "obviously too high"
+**Solution:**
+- Mechanically check composite conditions
+- Wait for minimum 3 conditions
+
+---
+
+## Emergency Response Flowchart
+
+```
+Market shock detected
+    ↓
+Q: Have positions?
+    ↓YES
+Q: Down -5%+ ?
+    ↓YES
+Q: ATR stop hit?
+    ↓YES
+→ Sell immediately (no debate)
+
+    ↓NO (stop not hit)
+Q: Bubble-O-Meter 13+?
+    ↓YES
+→ Consider 75%+ profit-taking
+
+    ↓NO (score ≤12)
+Q: VIX spike +30%+?
+    ↓YES
+→ Take 50% profits, tighten stops on rest
+
+    ↓NO
+→ Normal monitoring, stay calm
+```
+
+---
+
+## Golden Rules (Post on Your Wall)
+
+1. **Watch the process, not the price**
+
+2. **When taxi drivers talk stocks, exit**
+
+3. **"This time is different" is the same every time**
+
+4. **Mechanical rules protect your psychology**
+
+5. **Short after confirmation, take profits early**
+
+6. **When skepticism hurts socially, the end begins**
+
+7. **Aim for satisfaction, abandon perfection**
+
+8. **Bubbles last longer than expected, crashes faster**
+
+9. **Leverage is an express ticket to ruin**
+
+10. **"Markets can remain irrational longer than you can remain solvent"**
 
 ---
 
 ## Key Data Sources
 
-### Instantly Checkable Indicators
+### Instantly Accessible Indicators
 
-| Indicator | Source | Example URL |
-|-----------|--------|------------|
+| Indicator | Source | URL Example |
+|-----------|--------|-------------|
 | Google Search Trends | Google Trends | trends.google.com |
 | VIX (Fear Index) | CBOE | cboe.com/vix |
 | Put/Call Ratio | CBOE | cboe.com/data |
-| Margin Balance | FINRA | finra.org/data |
-| Futures Positions | CFTC COT | cftc.gov/reports |
+| Margin Debt | FINRA | finra.org/data |
+| Futures Positioning | CFTC COT | cftc.gov/reports |
 | IPO Statistics | Renaissance IPO | renaissancecapital.com |
 
-### API-Accessible Auto-Retrieval
+### API-Accessible for Automation
 
 ```python
 # Example: Google Trends (pytrends)
@@ -146,209 +319,24 @@ current_vix = vix.history(period='1d')['Close'].iloc[-1]
 
 ---
 
-## Profit-Taking Strategy Templates
-
-### Template 1: Stair-Step Profit-Taking (Conservative)
-
-```
-Position: $10,000 initial investment
-Targets:  +20%, +40%, +60%, +80%
-
-+20% ($12,000) → Sell 25% = $3,000 secured
-+40% ($14,000) → Sell 25% = $3,500 secured
-+60% ($16,000) → Sell 25% = $4,000 secured
-+80% ($18,000) → Sell 25% = $4,500 secured
-
-Total profits: $15,000 (+50% equivalent)
-```
-
-### Template 2: ATR Trailing (Aggressive)
-
-```python
-def calculate_trailing_stop(current_price, atr_20d, bubble_phase):
-    """
-    Calculate trailing stop based on bubble stage
-
-    bubble_phase: 'normal', 'caution', 'euphoria', 'critical'
-    """
-    multipliers = {
-        'normal': 2.0,
-        'caution': 1.8,
-        'euphoria': 1.5,
-        'critical': 1.2
-    }
-    multiplier = multipliers.get(bubble_phase, 2.0)
-    stop_price = current_price - (atr_20d * multiplier)
-    return stop_price
-
-# Usage example
-current_price = 450.0
-atr_20d = 10.0  # Average True Range over 20 days
-bubble_phase = 'euphoria'
-
-stop = calculate_trailing_stop(current_price, atr_20d, bubble_phase)
-print(f"Trailing Stop: ${stop:.2f}")
-# Output: Trailing Stop: $435.00
-```
-
-### Template 3: Hybrid (Recommended)
-
-```
-Stage 1 (Boom period):
-  → Reduce 50% of position via stair-step profit-taking
-
-Stage 2 (Euphoria period):
-  → Apply ATR trailing to remaining 50%, follow upside
-
-Stage 3 (Panic signs):
-  → Exit immediately when ATR stop hit
-```
-
----
-
-## Short-Selling Timing Assessment (Critical)
-
-### ❌ Absolutely NG: Early Contrarian
-
-```
-Reason: Normal for prices to rise 2-3x more after feeling "too high"
-Risk: "Markets can remain irrational longer than you can remain solvent"
-```
-
-### ✅ Recommended: After Composite Conditions Clear
-
-**Consider starting when at least 3 apply:**
-
-1. □ Weekly chart shows clear lower highs
-2. □ Volume peaks out (3 consecutive weeks declining)
-3. □ Sharp drop in leverage indicators (margin balance -20%+)
-4. □ Media/search trends peak out
-5. □ Weak stocks within sector start breaking down first
-6. □ VIX surges (+30%+)
-7. □ Fed/policy shift signals
-
-**Execution Example:**
-
-```
-Condition Check:
-[✓] 1. Weekly lower highs forming
-[✓] 2. Volume declining 3 weeks straight
-[×] 3. Margin balance still elevated
-[✓] 4. Google search trends -40%
-[×] 5. Still broad rally continuing
-[✓] 6. VIX +35% surge
-[×] 7. No policy changes
-
-→ 4/7 met, shorts consideration OK
-→ Small position (25% of normal) for test entry
-```
-
----
-
-## Common Failure Patterns & Solutions
-
-### Failure 1: "Too late" paralysis, missing opportunities
-
-**Psychology:** Regret aversion (fear of being late)
-**Solution:**
-- Conduct Bubble-O-Meter when feeling "too late"
-- Score ≤8: Small position entry OK
-- Score ≥9: Correct to stay out
-
-### Failure 2: Re-entry after profit-taking (buying high)
-
-**Psychology:** Hindsight bias ("knew it would go higher")
-**Solution:**
-- 72-hour no re-entry rule after profit-taking
-- Re-entry decisions only after Bubble-O-Meter check
-
-### Failure 3: Can't take profits due to "still rising"
-
-**Psychology:** Greed + Overconfidence
-**Solution:**
-- Automate stair-step profit-taking (pre-set limit orders)
-- Aim for "satisfaction," abandon "perfection"
-
-### Failure 4: Too-early shorts
-
-**Psychology:** Subjective "obviously too high" judgment
-**Solution:**
-- Mechanically verify composite conditions
-- Wait for minimum 3 conditions to clear
-
----
-
-## Emergency Response Flowchart
-
-```
-Detect market volatility
-    ↓
-Q: Have positions?
-    ↓YES
-Q: Down -5% or more?
-    ↓YES
-Q: ATR stop reached?
-    ↓YES
-→ Sell immediately (no debate)
-
-    ↓NO (Stop not reached)
-Q: Bubble-O-Meter score 13+?
-    ↓YES
-→ Consider 75%+ profit-taking
-
-    ↓NO (Score ≤12)
-Q: VIX surge +30%+?
-    ↓YES
-→ 50% profit-taking, tighten remaining stops
-
-    ↓NO
-→ Business as usual, continue calm observation
-```
-
----
-
-## Golden Rules (10 Commandments to Post on Wall)
-
-1. **See process, not price**
-
-2. **When taxi drivers talk stocks, exit**
-
-3. **"This time is different" is always the same**
-
-4. **Mechanical rules protect psychology**
-
-5. **Short after confirmation, take profits early**
-
-6. **When skepticism hurts, the end begins**
-
-7. **Aim for satisfaction, abandon perfection**
-
-8. **Bubbles last longer than expected, collapses are faster**
-
-9. **Leverage is an express ticket to ruin**
-
-10. **"Markets can remain irrational longer than you can remain solvent"**
-
----
-
-## Resources for Further Learning
+## Further Learning
 
 ### Books
-- **"Manias, Panics, and Crashes"** - Charles Kindleberger
-- **"Irrational Exuberance"** - Robert Shiller
-- **"The Alchemy of Finance"** - George Soros
+- "Manias, Panics, and Crashes" - Charles Kindleberger
+- "Irrational Exuberance" - Robert Shiller
+- "The Alchemy of Finance" - George Soros
 
 ### Research
 - Hyman Minsky's Financial Instability Hypothesis
-- Classic papers in Behavioral Finance
+- Behavioral Finance classics
 
 ### Data & Tools
-- **TradingView**: Charts and technical indicators
-- **FRED (Federal Reserve)**: Economic indicator time series
-- **Finviz**: Screening and heatmaps
-- **Google Trends**: Social trends
+- TradingView: Charts & technical indicators
+- FRED (Federal Reserve): Economic time series
+- Finviz: Screening & heatmaps
+- Google Trends: Social trends
 
 ---
 
 **Last Updated:** 2025 Edition
-**License:** Educational and personal use only, redistribution prohibited
+**License:** Educational/personal use only

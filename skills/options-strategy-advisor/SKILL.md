@@ -520,7 +520,7 @@ Adjustments:
 
 When user asks about earnings strategies, fetch earnings date:
 ```python
-from earnings_calendar import get_next_earnings_date
+from earnings_calendar import get_next_earnings_date # (from the `earnings-calendar` skill)
 
 earnings_date = get_next_earnings_date("AAPL")
 days_to_earnings = (earnings_date - today).days
@@ -985,6 +985,6 @@ Workflow:
 ---
 
 **Version**: 1.0
-**Last Updated**: 2025-11-08
+**Last Updated**: 2026-06-15
 **Dependencies**: Python 3.8+, numpy, scipy, pandas, requests
 **API**: FMP API (Free tier sufficient)

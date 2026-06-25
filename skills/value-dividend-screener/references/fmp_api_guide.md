@@ -55,7 +55,7 @@ source ~/.bashrc
 ### Method 2: Command-Line Argument
 
 ```bash
-python3 scripts/screen_dividend_stocks.py --api-key your_api_key_here
+`python3 scripts/screen_dividend_stocks.py --fmp-api-key your_api_key_here`
 ```
 
 ## Key Endpoints Used
@@ -242,7 +242,7 @@ For free tier (250 requests/day):
 - Detailed analysis: 5 × N stocks = 5N requests
 - **Maximum stocks per run**: (250 - 1) / 5 = ~49 stocks
 
-**Script default**: Analyzes first 100 candidates but typically finds ~20-30 that pass all criteria
+**Script behavior**: The FMP Stock Screener fetches up to `limit: 1000` candidates. The script then analyzes these candidates sequentially, stopping if API rate limits are hit or `top N` results are found. Typically, out of these, ~20-30 stocks pass all the detailed criteria.
 
 ### Best Practices
 

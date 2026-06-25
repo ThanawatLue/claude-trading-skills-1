@@ -84,27 +84,20 @@ Narrow focus to specific industry within sector:
 
 **Objective:** Fetch price history for correlation and cointegration analysis.
 
-**Data Requirements:**
+Data Requirements:
 - Timeframe: 2 years (minimum 252 trading days)
 - Frequency: Daily closing prices
 - Adjustments: Adjusted for splits and dividends
 - Clean data: No gaps or missing values
 
-**FMP API Endpoint:**
+**Note:** Historical price data fetching is implicitly handled by the `scripts/find_pairs.py` and `scripts/analyze_spread.py` scripts.
+
+FMP API Endpoint:
 ```
 GET /v3/historical-price-full/{symbol}?apikey=YOUR_API_KEY
 ```
 
-**Data Validation:**
-- Verify consistent date ranges across all symbols
-- Remove stocks with >10% missing data
-- Fill minor gaps with forward-fill method
-- Log data quality issues
-
-**Script Execution:**
-```bash
-python scripts/fetch_price_data.py --sector Technology --lookback 730
-```
+Data Validation:
 
 ### Step 3: Calculate Correlation and Beta
 
@@ -475,6 +468,44 @@ python scripts/analyze_spread.py \
 - Position sizing
 - Historical z-score chart (text)
 
+## Output
+
+The `pair-trade-screener` skill provides two main types of output, depending on the script executed:
+
+### From `scripts/find_pairs.py`
+
+This script outputs a JSON array of identified cointegrated pairs, suitable for further programmatic processing or for quickly scanning potential opportunities. Each object in the array represents a pair and includes key statistical metrics and a current trading signal if applicable.
+
+**Example Output Structure:**
+```json
+[
+  {
+    "pair": "AAPL/MSFT",
+    "stock_a": "AAPL",
+    "stock_b": "MSFT",
+    "correlation": 0.87,
+    "beta": 1.15,
+    "cointegration_pvalue": 0.012,
+    "adf_statistic": -3.45,
+    "half_life_days": 42,
+    "current_zscore": -2.3,
+    "signal": "LONG",
+    "strength": "Strong"
+  }
+]
+```
+
+### From `scripts/analyze_spread.py`
+
+This script provides a detailed analysis for a specific pair, generating actionable recommendations and a visual representation of the spread behavior. The output is typically text-based, designed for direct operator consumption.
+
+**Key Output Elements:**
+- **Current Spread Analysis**: Details on the current price relationship between the two stocks.
+- **Z-score Calculation**: The current statistical deviation from the historical mean.
+- **Entry/Exit Recommendations**: Clear signals (LONG/SHORT/NONE) based on predefined z-score thresholds.
+- **Position Sizing**: Guidance on how to allocate capital to maintain market neutrality.
+- **Historical Z-score Chart**: A text-based chart illustrating the spread's movement over time, with entry/exit levels marked for context.
+
 ## Reference Documentation
 
 ### references/methodology.md
@@ -532,10 +563,20 @@ Deep dive into cointegration testing:
 - **Statistical foundation**: No discretionary interpretation
 - **Market neutral focus**: Minimize directional beta exposure
 - **Data quality critical**: Garbage in, garbage out
-- **Requires FMP API key**: Free tier sufficient for basic screening
-- **Python dependencies**: pandas, numpy, scipy, statsmodels
 
-## Common Use Cases
+## Prerequisites
+
+- **Python Environment**: Python 3.8+
+- **Required Libraries**: `pandas`, `numpy`, `scipy`, `statsmodels`, `requests`
+  (Install via `pip install pandas numpy scipy statsmodels requests`)
+- **FMP API Key**: Required for fetching historical price data.
+  Set as an environment variable:
+  ```bash
+  export FMP_API_KEY="YOUR_API_KEY_HERE"
+  ```
+  Replace `YOUR_API_KEY_HERE` with your actual Financial Modeling Prep API key.
+
+## API Requirements
 
 **Use Case 1: Technology Sector Pairs**
 ```

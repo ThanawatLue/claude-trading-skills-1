@@ -74,9 +74,9 @@ def calculate_vcp_pattern(
         return empty_result
 
     # Extract price arrays
-    highs = [d.get("high", d.get("close", 0)) for d in prices]
-    lows = [d.get("low", d.get("close", 0)) for d in prices]
-    closes = [d.get("close", 0) for d in prices]
+    highs = [float(d.get("high") or d.get("close") or 0) for d in prices]
+    lows = [float(d.get("low") or d.get("close") or 0) for d in prices]
+    closes = [float(d.get("close") or 0) for d in prices]
     dates = [d.get("date", f"day-{i}") for i, d in enumerate(prices)]
 
     # Step A: Find swing points using ZigZag (primary) with fixed-window fallback

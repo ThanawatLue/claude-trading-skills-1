@@ -16,6 +16,26 @@ Screen US equities based on quantitative criteria including valuation ratios, di
 
 **Efficiency Advantage**: Using FINVIZ pre-screening can reduce FMP API calls by 90%, making this approach ideal for free-tier API users.
 
+## Prerequisites
+
+To use this skill, you will need:
+
+1.  **API Keys**:
+    *   **FMP API Key**: Required for all screening. Obtainable from [Financial Modeling Prep](https://financialmodelingprep.com/developer/docs).
+    *   **FINVIZ API Key**: (Optional, but recommended for two-stage screening) Requires a FINVIZ Elite subscription. This key allows pre-screening to reduce FMP API usage.
+    Set these as environment variables:
+    ```bash
+    export FMP_API_KEY=your_fmp_key_here
+    export FINVIZ_API_KEY=your_finviz_key_here # Only if using FINVIZ
+    ```
+
+2.  **Python Packages**:
+    *   `requests`: For making HTTP requests to APIs.
+    You can install it using pip:
+    ```bash
+    pip install requests
+    ```
+
 ## When to Use
 
 Invoke this skill when the user requests:
@@ -139,25 +159,9 @@ python3 scripts/screen_dividend_stocks.py --fmp-api-key $FMP_API_KEY
 3. Composite scoring and ranking
 4. Output top N stocks to JSON file
 
-**Expected runtime (FMP-Only):** 5-15 minutes for 100-300 candidates (rate limiting applies)
+## Output
 
-**API Usage Comparison:**
-- Two-Stage: ~50-100 FMP API calls (FINVIZ pre-filters to ~30 stocks)
-- FMP-Only: ~500-1500 FMP API calls (analyzes all screener results)
-
-### Step 3: Parse and Analyze Results
-
-Read the generated JSON file:
-
-```python
-import json
-
-with open('dividend_screener_results.json', 'r') as f:
-    data = json.load(f)
-
-metadata = data['metadata']
-stocks = data['stocks']
-```
+The skill generates a JSON file with screening results, containing metadata and a list of stocks.
 
 **Key data points per stock:**
 - Basic info: `symbol`, `company_name`, `sector`, `market_cap`, `price`
@@ -168,18 +172,14 @@ stocks = data['stocks']
 - Quality: `roe`, `profit_margin`, `quality_score`
 - Overall ranking: `composite_score`
 
-### Step 4: Generate Markdown Report
-
-Create structured markdown report for user with following sections:
-
-#### Report Structure
+**Report Structure (Markdown Example):**
 
 ```markdown
 # Value Dividend Stock Screening Report
 
 **Generated:** [Timestamp]
 **Screening Criteria:**
-- Dividend Yield: >= 3.5%
+- Dividend Yield: >= 3.0%
 - P/E Ratio: <= 20
 - P/B Ratio: <= 2
 - Dividend Growth (3Y CAGR): >= 5%
@@ -261,12 +261,12 @@ Create structured markdown report for user with following sections:
 - Economic sensitivity warnings
 ```
 
-### Step 5: Provide Context and Methodology
+## Step 5: Provide Context and Methodology
 
 Reference screening methodology when explaining results:
 
 **Key concepts to explain:**
-- Why these specific thresholds (3.5% yield, P/E 20, P/B 2)
+- Why these specific thresholds (3.0% yield, P/E 20, P/B 2)
 - Importance of dividend growth vs. static high yield
 - How composite score balances value, growth, and quality
 - Dividend sustainability vs. dividend trap distinction
@@ -331,7 +331,7 @@ Comprehensive screening script that:
 Comprehensive documentation of screening approach:
 
 **Phase 1: Initial Quantitative Filters**
-- Dividend yield >= 3.5% rationale and calculation
+- Dividend yield >= 3.0% rationale and calculation
 - P/E ratio <= 20 threshold justification
 - P/B ratio <= 2 valuation logic
 
@@ -513,7 +513,7 @@ python3 scripts/screen_dividend_stocks.py --use-finviz --finviz-api-key your_key
 ### "No stocks found matching all criteria"
 **Solution:** Criteria may be too restrictive
 - Relax P/E threshold (increase from 20)
-- Lower dividend yield requirement (decrease from 3.5%)
+- Lower dividend yield requirement (decrease from 3.0%)
 - Reduce dividend growth requirement (decrease from 5%)
 - Check market conditions (bear markets may have fewer qualifiers)
 

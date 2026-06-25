@@ -999,8 +999,24 @@ def review_and_improve(
 # -- Daily flow: rollback --
 
 
-def _rollback_skill(project_root: Path, skill_name: str, branch_name: str) -> None:
-    """Roll back ALL changes and return to main."""
+def _rollback_skill(project_root: Path, skill_name: str, branch_name: str, local: bool = False) -> None:
+    """Roll back ALL changes and return to main (or clean up files locally if --local)."""
+    if local:
+        skill_dir = project_root / "skills" / skill_name
+        if skill_dir.is_dir():
+            shutil.rmtree(skill_dir)
+        en_doc = project_root / "docs" / "en" / "skills" / f"{skill_name}.md"
+        if en_doc.is_file():
+            en_doc.unlink()
+        if shutil.which("git"):
+            subprocess.run(
+                ["git", "restore", "pyproject.toml"],
+                cwd=project_root,
+                capture_output=True,
+                check=False,
+            )
+        return
+
     rollback_paths = [
         f"skills/{skill_name}/",
         "pyproject.toml",
@@ -1088,9 +1104,10 @@ def create_skill_pr(
     idea: dict,
     report: dict | None,
     branch_name: str,
+    local: bool = False,
 ) -> str | None:
-    """Lint, commit, push, and create a PR. Returns PR URL or None."""
-    if not shutil.which("gh"):
+    """Lint, commit, push, and create a PR. Returns PR URL or None (or returns 'local' if --local)."""
+    if not local and not shutil.which("gh"):
         logger.error("gh CLI not found; cannot create PR.")
         return None
     # Auto-fix lint issues
@@ -1117,6 +1134,10 @@ def create_skill_pr(
     stage_paths = [f"skills/{skill_name}/"]
     if testpaths_modified:
         stage_paths.append("pyproject.toml")
+    if local:
+        logger.info("Local mode: Skill successfully generated and registered locally.")
+        return "local"
+
     result = subprocess.run(
         ["git", "add"] + stage_paths,
         cwd=project_root,
@@ -1365,7 +1386,7 @@ def _record_daily_state(
 # -- Daily flow: main orchestrator --
 
 
-def run_daily(project_root: Path, dry_run: bool = False) -> int:
+def run_daily(project_root: Path, dry_run: bool = False, local: bool = False) -> int:
     """Main daily flow: select idea, design skill, review, improve, create PR.
 
     Returns 0 on success (or no-op), 1 on failure.
@@ -1433,7 +1454,7 @@ def run_daily(project_root: Path, dry_run: bool = False) -> int:
             return 0
 
         # Non-dry-run: full flow
-        if not git_safe_check(project_root):
+        if not local and not git_safe_check(project_root):
             _record_daily_state(
                 project_root, idea, skill_name, idea_id, 0, None, "git_check_failed"
             )
@@ -1441,44 +1462,45 @@ def run_daily(project_root: Path, dry_run: bool = False) -> int:
 
         branch_name = f"skill-generation/{idea_id}-{skill_name}"
 
-        # Fix V3#1: existing PR -> mark as pr_open
-        existing_pr_url = check_existing_pr(project_root, branch_name)
-        if existing_pr_url is not None:
-            logger.info("Open PR already exists for %s: %s", branch_name, existing_pr_url)
-            update_backlog_status(project_root, idea_id, "pr_open", pr_url=existing_pr_url)
-            _record_daily_state(
-                project_root, idea, skill_name, idea_id, 0, existing_pr_url, "pr_already_open"
+        if not local:
+            # Fix V3#1: existing PR -> mark as pr_open
+            existing_pr_url = check_existing_pr(project_root, branch_name)
+            if existing_pr_url is not None:
+                logger.info("Open PR already exists for %s: %s", branch_name, existing_pr_url)
+                update_backlog_status(project_root, idea_id, "pr_open", pr_url=existing_pr_url)
+                _record_daily_state(
+                    project_root, idea, skill_name, idea_id, 0, existing_pr_url, "pr_already_open"
+                )
+                return 0
+
+            # Fix #3: delete stale local branch if present
+            subprocess.run(
+                ["git", "branch", "-D", branch_name],
+                cwd=project_root,
+                capture_output=True,
+                check=False,
             )
-            return 0
 
-        # Fix #3: delete stale local branch if present
-        subprocess.run(
-            ["git", "branch", "-D", branch_name],
-            cwd=project_root,
-            capture_output=True,
-            check=False,
-        )
-
-        # Create branch
-        result = subprocess.run(
-            ["git", "checkout", "-b", branch_name],
-            cwd=project_root,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if result.returncode != 0:
-            logger.error("git checkout -b failed: %s", result.stderr.strip()[:200])
-            _record_daily_state(
-                project_root, idea, skill_name, idea_id, 0, None, "branch_create_failed"
+            # Create branch
+            result = subprocess.run(
+                ["git", "checkout", "-b", branch_name],
+                cwd=project_root,
+                capture_output=True,
+                text=True,
+                check=False,
             )
-            return 1
+            if result.returncode != 0:
+                logger.error("git checkout -b failed: %s", result.stderr.strip()[:200])
+                _record_daily_state(
+                    project_root, idea, skill_name, idea_id, 0, None, "branch_create_failed"
+                )
+                return 1
 
-        created_branch = True
+            created_branch = True
 
         # Step 10: Design the skill
         if not design_skill(project_root, idea, skill_name):
-            _rollback_skill(project_root, skill_name, branch_name)
+            _rollback_skill(project_root, skill_name, branch_name, local=local)
             created_branch = False
             update_backlog_status(project_root, idea_id, "design_failed")
             _record_daily_state(project_root, idea, skill_name, idea_id, 0, None, "design_failed")
@@ -1502,7 +1524,7 @@ def run_daily(project_root: Path, dry_run: bool = False) -> int:
         # Step 12: Review and improve
         passed, report = review_and_improve(project_root, skill_name)
         if not passed:
-            _rollback_skill(project_root, skill_name, branch_name)
+            _rollback_skill(project_root, skill_name, branch_name, local=local)
             created_branch = False
             update_backlog_status(project_root, idea_id, "review_failed")
             _record_daily_state(project_root, idea, skill_name, idea_id, 0, None, "review_failed")
@@ -1521,22 +1543,23 @@ def run_daily(project_root: Path, dry_run: bool = False) -> int:
             return 1
 
         # Step 14: Create PR
-        pr_url = create_skill_pr(project_root, skill_name, idea, report, branch_name)
+        pr_url = create_skill_pr(project_root, skill_name, idea, report, branch_name, local=local)
         if not pr_url:
-            _rollback_skill(project_root, skill_name, branch_name)
+            _rollback_skill(project_root, skill_name, branch_name, local=local)
             created_branch = False
             update_backlog_status(project_root, idea_id, "pr_failed")
             _record_daily_state(project_root, idea, skill_name, idea_id, 0, None, "pr_failed")
             return 1
 
         # Step 15: Return to main (before marking completed)
-        checkout_main = subprocess.run(
-            ["git", "checkout", "main"],
-            cwd=project_root,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        if not local:
+            checkout_main = subprocess.run(
+                ["git", "checkout", "main"],
+                cwd=project_root,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
         if checkout_main.returncode != 0:
             logger.warning(
                 "git checkout main failed after PR creation (PR %s still valid): %s",
@@ -1676,6 +1699,7 @@ def parse_args():
     )
     parser.add_argument("--dry-run", action="store_true", help="Pass --dry-run to subscripts")
     parser.add_argument("--project-root", default=".", help="Project root directory")
+    parser.add_argument("--local", action="store_true", help="Run locally, skipping branch creation and PR/push steps")
     return parser.parse_args()
 
 
@@ -1686,7 +1710,7 @@ def main() -> int:
     if args.mode == "weekly":
         return run_weekly(project_root, dry_run=args.dry_run)
     elif args.mode == "daily":
-        return run_daily(project_root, dry_run=args.dry_run)
+        return run_daily(project_root, dry_run=args.dry_run, local=args.local)
 
     return 1
 

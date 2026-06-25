@@ -3,7 +3,7 @@ layout: default
 title: "Skill Integration Tester"
 grand_parent: English
 parent: Skill Guides
-nav_order: 11
+nav_order: 54
 lang_peer: /ja/skills/skill-integration-tester/
 permalink: /en/skills/skill-integration-tester/
 ---
@@ -11,7 +11,7 @@ permalink: /en/skills/skill-integration-tester/
 # Skill Integration Tester
 {: .no_toc }
 
-Validate multi-skill workflows defined in CLAUDE.md by checking skill existence, inter-skill data contracts (JSON schema compatibility), file naming conventions, and handoff integrity. Use when adding new workflows, modifying skill outputs, or verifying pipeline health before release.
+Validate multi-skill workflows defined in GEMINI.md by checking skill existence, inter-skill data contracts (JSON schema compatibility), file naming conventions, and handoff integrity. Use when adding new workflows, modifying skill outputs, or verifying pipeline health before release.
 {: .fs-6 .fw-300 }
 
 <span class="badge badge-free">No API</span>
@@ -30,7 +30,7 @@ Validate multi-skill workflows defined in CLAUDE.md by checking skill existence,
 
 ## 1. Overview
 
-Validate multi-skill workflows defined in CLAUDE.md (Daily Market Monitoring,
+Validate multi-skill workflows defined in GEMINI.md (Daily Market Monitoring,
 Weekly Strategy Review, Earnings Momentum Trading, etc.) by executing each step
 in sequence. Check inter-skill data contracts for JSON schema compatibility
 between output of step N and input of step N+1, verify file naming conventions,
@@ -40,7 +40,7 @@ and report broken handoffs. Supports dry-run mode with synthetic fixtures.
 
 ## 2. When to Use
 
-- After adding or modifying a multi-skill workflow in CLAUDE.md
+- After adding or modifying a multi-skill workflow in GEMINI.md
 - After changing a skill's output format (JSON schema, file naming)
 - Before releasing new skills to verify pipeline compatibility
 - When debugging broken handoffs between consecutive workflow steps
@@ -69,7 +69,7 @@ python3 skills/skill-integration-tester/scripts/validate_workflows.py \
 
 ### Step 1: Run Integration Validation
 
-Execute the validation script against the project's CLAUDE.md:
+Execute the validation script against the project's GEMINI.md:
 
 ```bash
 python3 skills/skill-integration-tester/scripts/validate_workflows.py \

@@ -3,7 +3,7 @@ layout: default
 title: "Trade Hypothesis Ideator"
 grand_parent: English
 parent: Skill Guides
-nav_order: 11
+nav_order: 63
 lang_peer: /ja/skills/trade-hypothesis-ideator/
 permalink: /en/skills/trade-hypothesis-ideator/
 ---
@@ -35,14 +35,32 @@ Generate falsifiable trade strategy hypotheses from market data, trade logs, and
 
 ---
 
-## 2. Prerequisites
+## 2. When to Use
 
-- **API Key:** None required
-- **Python 3.9+** recommended
+Use this skill when you have gathered market data, trade logs, or journal snippets and need to systematically generate and evaluate potential trading strategies. It is particularly useful for:
+- **Generating new trade ideas:** When exploring new market opportunities or refining existing ones.
+- **Validating intuitions:** To formalize vague trading hunches into testable hypotheses.
+- **Pre-analysis of strategy concepts:** Before committing to full backtesting, quickly assess the viability and potential risks of a strategy.
+- **Structured learning from trade journals:** Extracting patterns and generating hypotheses from your past trading performance.
+- **Input:** Structured input bundles containing market context, trade details, and observational data.
+- **Strategic Objective:** To accelerate the identification of promising trading strategies and enhance the decision-making process.
 
 ---
 
-## 3. Quick Start
+## 3. Prerequisites
+
+- **Python Environment:** Python 3.9 or higher.
+- **Poetry:** This project uses Poetry for dependency management. Ensure it is installed (`pip install poetry`).
+- **Dependencies:** Install project dependencies using `poetry install`.
+- **Environment Variables:**
+    - `GEMINI_API_KEY`: Your Gemini API key for accessing language models.
+    - `ANTHROPIC_API_KEY`: (Optional) Your Anthropic API key if using Anthropic models.
+- **Input Bundle Format:** Input JSON bundles must conform to the schema defined in `schemas/input_bundle_schema.json`.
+- **Configurable Guardrails:** The list of banned phrases used for guardrails can be found and customized in `config/banned_phrases.json`. Operators can modify this file to adjust the phrases that trigger warnings or rejections in hypothesis generation.
+
+---
+
+## 4. Quick Start
 
 1. Receive input JSON bundle.
 2. Run pass 1 normalization + evidence extraction.
@@ -55,7 +73,7 @@ Generate falsifiable trade strategy hypotheses from market data, trade logs, and
 
 ---
 
-## 4. Workflow
+## 5. Workflow
 
 1. Receive input JSON bundle.
 2. Run pass 1 normalization + evidence extraction.
@@ -68,7 +86,7 @@ Generate falsifiable trade strategy hypotheses from market data, trade logs, and
 
 ---
 
-## 5. Resources
+## 6. Resources
 
 **References:**
 

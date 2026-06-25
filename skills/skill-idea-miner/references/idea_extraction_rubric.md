@@ -1,6 +1,6 @@
 # Idea Extraction Rubric
 
-Criteria and scoring framework for mining skill ideas from Claude Code session logs.
+Criteria and scoring framework for mining skill ideas from Gemini Code session logs.
 
 ## Signal Detection Rules
 
@@ -57,10 +57,10 @@ Detect user messages that did not result in tool actions:
 
 ## LLM Abstraction Prompt
 
-When invoking Claude CLI for idea abstraction, use this prompt structure:
+When invoking Gemini CLI for idea abstraction, use this prompt structure:
 
 ```
-You are analyzing Claude Code session logs to extract skill idea candidates
+You are analyzing Gemini Code session logs to extract skill idea candidates
 for a trading/investing skill repository.
 
 Given the following signals detected from recent sessions:

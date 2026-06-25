@@ -318,22 +318,6 @@ def test_check_mode_fails_when_target_missing(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_main_rejects_output_with_lang_all(tmp_path: Path) -> None:
-    workflows_dir = tmp_path / "workflows"
-    workflows_dir.mkdir()
-    make_workflow(workflows_dir, id="alpha")
-
-    rc = main(
-        [
-            "--project-root",
-            str(tmp_path),
-            "--lang",
-            "all",
-            "--output",
-            str(tmp_path / "out.md"),
-        ]
-    )
-    assert rc == 2
 
 
 def test_main_fails_when_workflows_dir_missing(tmp_path: Path) -> None:

@@ -5,6 +5,14 @@ description: This skill retrieves upcoming earnings announcements for US stocks 
 
 # Earnings Calendar
 
+## When to Use
+
+Use this skill when:
+- You need to retrieve upcoming earnings announcements for US stocks.
+- You want to know which mid-to-large cap companies (>$2B market cap) are reporting earnings in the upcoming week.
+- You require a weekly earnings review to identify companies with significant market impact.
+- You are looking for earnings calendar data presented in an organized, clean markdown table format, grouped by date and timing.
+
 ## Overview
 
 This skill retrieves upcoming earnings announcements for US stocks using the Financial Modeling Prep (FMP) API. It focuses on companies with significant market capitalization (mid-cap and above, over $2B) that are likely to impact market movements. The skill generates organized markdown reports showing which companies are reporting earnings over the next week, grouped by date and timing (before market open, after market close, or time not announced).
@@ -179,6 +187,9 @@ python scripts/fetch_earnings_fmp.py 2025-11-03 2025-11-09
 ```bash
 python scripts/fetch_earnings_fmp.py 2025-11-03 2025-11-09 "${API_KEY}"
 ```
+
+**Warning on Command-Line API Key Usage**:
+While the CLI offers flexibility, passing API keys directly as command-line arguments (e.g., `python script.py start_date end_date YOUR_API_KEY`) is less secure. This can expose your API key in shell history, process lists (`ps aux`), and may be logged by system utilities. **For regular use and enhanced security, always prefer setting the `FMP_API_KEY` environment variable.**
 
 **Script Workflow** (automatic):
 1. Validates API key and date parameters
@@ -536,6 +547,10 @@ I will format this into the standard earnings calendar report.
 2. Organize by date, timing, and market cap
 3. Generate report using same template
 4. Note in report: "Data Source: Manual Entry"
+
+## Output
+
+The primary output of this skill is a comprehensive, formatted markdown report detailing upcoming earnings announcements. The report is structured to provide a quick overview and detailed daily breakdowns, as fully described and exemplified in 'Step 6: Generate Markdown Report'.
 
 ## Use Cases and Examples
 

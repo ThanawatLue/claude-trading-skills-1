@@ -100,7 +100,8 @@ def calculate_composite_score(
     strongest_key = max(component_scores, key=component_scores.get)
 
     # Rating (raw — before any caps)
-    rating_info = _get_rating(composite)
+    raw_rating_string = _get_rating(composite)
+    rating_info = _get_rating_info_for(raw_rating_string)
 
     # Override rating when VCP pattern is not validated (e.g. expanding contractions)
     if not valid_vcp and composite >= 70:
@@ -198,41 +199,17 @@ def _get_rating_info_for(rating: str) -> dict:
     )
 
 
-def _get_rating(composite: float) -> dict:
-    """Map composite score to rating and guidance."""
+def _get_rating(composite: float) -> str:
+    """Map composite score to rating string."""
     if composite >= 90:
-        return {
-            "rating": "Textbook VCP",
-            "description": "Ideal VCP setup with all components aligned",
-            "guidance": "Buy at pivot, aggressive position sizing (1.5-2x normal)",
-        }
+        return "Textbook VCP"
     elif composite >= 80:
-        return {
-            "rating": "Strong VCP",
-            "description": "High-quality VCP with minor imperfections",
-            "guidance": "Buy at pivot, standard position sizing",
-        }
+        return "Strong VCP"
     elif composite >= 70:
-        return {
-            "rating": "Good VCP",
-            "description": "Solid VCP pattern developing",
-            "guidance": "Buy on volume confirmation above pivot",
-        }
+        return "Good VCP"
     elif composite >= 60:
-        return {
-            "rating": "Developing VCP",
-            "description": "VCP forming but not yet actionable",
-            "guidance": "Watchlist - wait for tighter contraction near pivot",
-        }
+        return "Developing VCP"
     elif composite >= 50:
-        return {
-            "rating": "Weak VCP",
-            "description": "Some VCP characteristics but incomplete",
-            "guidance": "Monitor only - pattern needs more development",
-        }
+        return "Weak VCP"
     else:
-        return {
-            "rating": "No VCP",
-            "description": "Does not qualify as a VCP setup",
-            "guidance": "Not actionable as VCP",
-        }
+        return "No VCP"

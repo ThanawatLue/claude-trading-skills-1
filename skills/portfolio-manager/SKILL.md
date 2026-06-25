@@ -1,56 +1,51 @@
 ---
 name: portfolio-manager
-description: Comprehensive portfolio analysis using Alpaca MCP Server integration to fetch holdings and positions, then analyze asset allocation, risk metrics, individual stock positions, diversification, and generate rebalancing recommendations. Use when user requests portfolio review, position analysis, risk assessment, performance evaluation, or rebalancing suggestions for their brokerage account.
+description: Comprehensive portfolio analysis using direct Alpaca API integration to fetch holdings and positions, then analyze asset allocation, risk metrics, individual stock positions, diversification, and generate rebalancing recommendations. Use when user requests portfolio review, position analysis, risk assessment, performance evaluation, or rebalancing suggestions for their brokerage account.
 ---
 
 # Portfolio Manager
 
 ## Overview
 
-Analyze and manage investment portfolios by integrating with Alpaca MCP Server to fetch real-time holdings data, then performing comprehensive analysis covering asset allocation, diversification, risk metrics, individual position evaluation, and rebalancing recommendations. Generate detailed portfolio reports with actionable insights.
+Analyze and manage investment portfolios by integrating with Alpaca's API to fetch real-time holdings data. This skill can operate directly with the Alpaca API or integrate with an Alpaca MCP (Model Context Protocol) Server if available, performing comprehensive analysis covering asset allocation, diversification, risk metrics, individual position evaluation, and rebalancing recommendations. Generate detailed portfolio reports with actionable insights.
 
-This skill leverages Alpaca's brokerage API through MCP (Model Context Protocol) to access live portfolio data, ensuring analysis is based on actual current positions rather than manually entered data.
-
-## When to Use
-
-Invoke this skill when the user requests:
-- "Analyze my portfolio"
-- "Review my current positions"
-- "What's my asset allocation?"
-- "Check my portfolio risk"
-- "Should I rebalance my portfolio?"
-- "Evaluate my holdings"
-- "Portfolio performance review"
-- "What stocks should I buy or sell?"
-- Any request involving portfolio-level analysis or management
+This skill primarily leverages Alpaca's brokerage API to access live portfolio data, ensuring analysis is based on actual current positions rather than manually entered data.
 
 ## Prerequisites
 
-### Alpaca MCP Server Setup
+### Alpaca API Key Configuration
 
-This skill requires Alpaca MCP Server to be configured and connected. The MCP server provides access to:
+This skill requires Alpaca API keys to be configured for direct API access. The API provides access to:
 - Current portfolio positions
 - Account equity and buying power
 - Historical positions and transactions
 - Market data for held securities
 
-**MCP Server Tools Used:**
+Set your `ALPACA_API_KEY`, `ALPACA_SECRET_KEY`, and `ALPACA_PAPER` environment variables (e.g., `ALPACA_PAPER=true` for paper trading). Refer to `./references/alpaca-mcp-setup.md` for detailed instructions on setting up API keys.
+
+### Alpaca MCP Server (Optional)
+
+If an Alpaca MCP Server is configured and connected, this skill can leverage its tools (`mcp__alpaca__get_account_info`, `mcp__alpaca__get_positions`, etc.) for data fetching. The MCP server provides a standardized interface for interacting with Alpaca.
+
+If you intend to use the MCP Server, ensure it is properly set up. If Alpaca MCP Server is not connected, the skill will fall back to direct API calls (if configured).
+
+**MCP Server Tools (if available):**
 - `get_account_info` - Fetch account equity, buying power, cash balance
 - `get_positions` - Retrieve all current positions with quantities, cost basis, market value
 - `get_portfolio_history` - Historical portfolio performance data
 - Market data tools for price quotes and fundamentals
 
-If Alpaca MCP Server is not connected, inform the user and provide setup instructions from `references/alpaca_mcp_setup.md`.
+If Alpaca MCP Server is not connected and direct API is not configured, inform the user and provide setup instructions from `./references/alpaca-mcp-setup.md`.
 
 ## Workflow
 
-### Step 1: Fetch Portfolio Data via Alpaca MCP
+### Step 1: Fetch Portfolio Data
 
-Use Alpaca MCP Server tools to gather current portfolio information:
+The skill attempts to fetch portfolio data using Alpaca MCP Server tools if an MCP server is configured. Otherwise, it will use direct Alpaca API calls.
 
 **1.1 Get Account Information:**
 ```
-Use mcp__alpaca__get_account_info to fetch:
+Fetch account information including:
 - Account equity (total portfolio value)
 - Cash balance
 - Buying power
@@ -59,7 +54,7 @@ Use mcp__alpaca__get_account_info to fetch:
 
 **1.2 Get Current Positions:**
 ```
-Use mcp__alpaca__get_positions to fetch all holdings:
+Fetch all current holdings including:
 - Symbol ticker
 - Quantity held
 - Average entry price (cost basis)
@@ -69,9 +64,9 @@ Use mcp__alpaca__get_positions to fetch all holdings:
 - Position size as % of portfolio
 ```
 
-**1.3 Get Portfolio History (Optional):**
+**1.3 Get Portfolio History (Optional):
 ```
-Use mcp__alpaca__get_portfolio_history for performance analysis:
+Fetch historical portfolio performance data for analysis:
 - Historical equity values
 - Time-weighted return calculation
 - Drawdown analysis
@@ -113,7 +108,7 @@ Perform comprehensive portfolio analysis using frameworks from reference files:
 
 #### 3.1 Asset Allocation Analysis
 
-**Read references/asset-allocation.md** for allocation frameworks
+**Read ./references/asset-allocation.md** for allocation frameworks
 
 Analyze current allocation across multiple dimensions:
 
@@ -158,7 +153,7 @@ Analyze current allocation across multiple dimensions:
 
 #### 3.2 Diversification Analysis
 
-**Read references/diversification-principles.md** for diversification theory
+**Read ./references/diversification-principles.md** for diversification theory
 
 Evaluate portfolio diversification quality:
 
@@ -204,7 +199,7 @@ Evaluate portfolio diversification quality:
 
 #### 3.3 Risk Analysis
 
-**Read references/portfolio-risk-metrics.md** for risk measurement frameworks
+**Read ./references/portfolio-risk-metrics.md** for risk measurement frameworks
 
 Calculate and interpret key risk metrics:
 
@@ -303,7 +298,7 @@ Evaluate portfolio performance using available data:
 
 For key positions (top 10-15 by portfolio weight), perform detailed analysis:
 
-**Read references/position-evaluation.md** for position analysis framework
+**Read ./references/position-evaluation.md** for position analysis framework
 
 For each significant position:
 
@@ -368,7 +363,7 @@ For each significant position:
 
 ### Step 5: Rebalancing Recommendations
 
-**Read references/rebalancing-strategies.md** for rebalancing approaches
+**Read ./references/rebalancing-strategies.md** for rebalancing approaches
 
 Generate specific rebalancing recommendations:
 
@@ -567,7 +562,7 @@ Be prepared to answer follow-up questions:
 
 This skill includes reference allocation models for different investor profiles:
 
-**Read references/target-allocations.md** for detailed models:
+**Read ./references/target-allocations.md** for detailed models:
 
 - **Conservative** (Capital preservation, income focus)
 - **Moderate** (Balanced growth and income)
@@ -591,7 +586,7 @@ If user's target allocation is unknown, assess appropriate risk profile based on
 - Current allocation (reveals preferences)
 - Position types (conservative vs speculative stocks)
 
-**Read references/risk-profile-questionnaire.md** for assessment framework
+**Read ./references/risk-profile-questionnaire.md** for assessment framework
 
 ## Output Guidelines
 
@@ -623,43 +618,68 @@ If user's target allocation is unknown, assess appropriate risk profile based on
 
 Load these references as needed during analysis:
 
-**references/alpaca-mcp-setup.md**
+**./references/alpaca-mcp-setup.md**
 - When: User needs help setting up Alpaca MCP Server
 - Contains: Installation instructions, API key configuration, MCP server connection steps, troubleshooting
 
-**references/asset-allocation.md**
+**./references/asset-allocation.md**
 - When: Analyzing portfolio allocation or creating rebalancing plan
 - Contains: Asset allocation theory, optimal allocation by risk profile, sector allocation guidelines, rebalancing triggers
 
-**references/diversification-principles.md**
+**./references/diversification-principles.md**
 - When: Assessing portfolio diversification quality
 - Contains: Modern portfolio theory basics, correlation concepts, optimal position count, concentration risk thresholds, diversification metrics
 
-**references/portfolio-risk-metrics.md**
+**./references/portfolio-risk-metrics.md**
 - When: Calculating risk scores or interpreting volatility
 - Contains: Beta calculation, standard deviation, Sharpe ratio, maximum drawdown, Value at Risk (VaR), risk-adjusted return metrics
 
-**references/position-evaluation.md**
+**./references/position-evaluation.md**
 - When: Analyzing individual holdings for buy/hold/sell decisions
 - Contains: Position analysis framework, thesis validation checklist, position sizing guidelines, sell discipline criteria
 
-**references/rebalancing-strategies.md**
+**./references/rebalancing-strategies.md**
 - When: Developing rebalancing recommendations
 - Contains: Rebalancing methodologies (calendar-based, threshold-based, tactical), tax optimization strategies, transaction cost considerations, implementation timing
 
-**references/target-allocations.md**
+**./references/target-allocations.md**
 - When: Need benchmark allocations for comparison
 - Contains: Model portfolios for conservative/moderate/growth/aggressive investors, sector target ranges, market cap distributions
 
-**references/risk-profile-questionnaire.md**
+**./references/risk-profile-questionnaire.md**
 - When: User hasn't specified risk tolerance or target allocation
 - Contains: Risk assessment questions, scoring methodology, risk profile classification
+
+## Usage Examples
+
+### 1. Verify Alpaca Direct API Connection
+
+To ensure your Alpaca API keys are correctly configured for direct API access, run the connection verification script:
+
+```bash
+python3 skills/portfolio-manager/scripts/check_alpaca_connection.py
+```
+
+This script verifies connectivity to the Alpaca API using the environment variables (`ALPACA_API_KEY`, `ALPACA_SECRET_KEY`, `ALPACA_PAPER`). It does NOT verify Alpaca MCP Server integration.
+
+### 2. Invoke Portfolio Analysis (Conceptual)
+
+To invoke the full portfolio analysis skill, you would typically interact with your agent using a prompt. The exact command depends on your agent framework.
+
+Example (conceptual):
+
+```bash
+# Assuming an agent CLI or direct script execution
+<agent_command> analyze my portfolio --alpaca-api-only
+# Or if a main Python script exists
+python3 skills/portfolio-manager/main.py --analyze --alpaca-api-only
+```
 
 ## Error Handling
 
 **If Alpaca MCP Server is not connected:**
 1. Inform user that Alpaca integration is required
-2. Provide setup instructions from references/alpaca-mcp-setup.md
+2. Provide setup instructions from ./references/alpaca-mcp-setup.md
 3. Offer alternative: manual data entry (less ideal, user provides CSV of positions)
 
 **If API returns incomplete data:**
@@ -740,6 +760,18 @@ Model portfolio behavior under different scenarios:
 - "Should I sell [SYMBOL]?"
 - "Is [SYMBOL] overweight in my portfolio?"
 - "What should I do with [SYMBOL]?"
+
+## Additional Resources
+
+**Alpaca Documentation:**
+- API docs: https://alpaca.markets/docs/
+- Python SDK: https://github.com/alpacahq/alpaca-trade-api-python
+- API status: https://status.alpaca.markets/
+
+**Community & Support:**
+- Alpaca support: support@alpaca.markets
+- Alpaca community: https://forum.alpaca.markets/
+- API status: https://status.alpaca.markets/
 
 ## Limitations and Disclaimers
 

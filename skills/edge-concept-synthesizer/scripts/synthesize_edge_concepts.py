@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import statistics
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
@@ -11,6 +12,9 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+
+logger = logging.getLogger("synthesize_edge_concepts")
+
 
 DEFAULT_EXPORTABLE_FAMILIES = {
     "pivot_breakout",
@@ -736,6 +740,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     """CLI entrypoint."""
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     args = parse_args()
     tickets_dir = Path(args.tickets_dir).resolve()
     hints_path = Path(args.hints).resolve() if args.hints else None
@@ -746,10 +751,10 @@ def main() -> int:
         ef_override = {f.strip() for f in args.exportable_families.split(",") if f.strip()}
 
     if not tickets_dir.exists():
-        print(f"[ERROR] tickets dir not found: {tickets_dir}")
+        logger.error(f"[ERROR] tickets dir not found: {tickets_dir}")
         return 1
     if hints_path is not None and not hints_path.exists():
-        print(f"[ERROR] hints file not found: {hints_path}")
+        logger.error(f"[ERROR] hints file not found: {hints_path}")
         return 1
 
     try:
@@ -840,13 +845,16 @@ def main() -> int:
         }
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(yaml.safe_dump(payload, sort_keys=False))
+        try:
+            output_path.write_text(yaml.safe_dump(payload, sort_keys=False))
+        except OSError as e:
+            raise ConceptSynthesisError(f"failed to write output file: {e}") from e
     except ConceptSynthesisError as exc:
-        print(f"[ERROR] {exc}")
+        logger.error(f"[ERROR] {exc}")
         return 1
 
     synth_msg = f" synthetic_tickets={len(synthetic_tickets)}" if synthetic_tickets else ""
-    print(f"[OK] concepts={len(concepts)}{synth_msg} output={output_path}")
+    logger.info(f"[OK] concepts={len(concepts)}{synth_msg} output={output_path}")
     return 0
 
 

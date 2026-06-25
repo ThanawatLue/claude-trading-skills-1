@@ -162,6 +162,7 @@ def analyze_symbol(
     peak_window: int,
     trough_window: int,
     min_depth_pct: float,
+    min_duration_days: int,
 ) -> list[dict]:
     """Analyze downtrends for a single symbol."""
     prices = _yf_fetch_prices(symbol, from_date, to_date)
@@ -174,7 +175,7 @@ def analyze_symbol(
     if not peaks or not troughs:
         return []
 
-    downtrends = find_downtrends(prices, peaks, troughs, min_depth_pct)
+    downtrends = find_downtrends(prices, peaks, troughs, min_depth_pct, min_duration_days)
 
     market_cap_tier = get_market_cap_tier(market_cap)
 
@@ -346,6 +347,12 @@ def main() -> None:
         help="Minimum depth percentage for a downtrend (default: 5.0)",
     )
     parser.add_argument(
+        "--min-duration-days",
+        type=int,
+        default=3,
+        help="Minimum duration in days for a downtrend (default: 3)",
+    )
+    parser.add_argument(
         "--max-stocks",
         type=int,
         default=100,
@@ -367,7 +374,7 @@ def main() -> None:
     print(f"Analyzing downtrends from {from_date} to {to_date}")
 
     # Get stock list
-    stocks = fetch_sp500_list(args.sector)
+    stocks = fetch_sp500_list(args.sector, limit=args.max_stocks)
     if not stocks:
         print("No stocks found matching criteria", file=sys.stderr)
         sys.exit(1)
@@ -394,6 +401,7 @@ def main() -> None:
             args.peak_window,
             args.trough_window,
             args.min_depth,
+            args.min_duration_days,
         )
         all_downtrends.extend(downtrends)
 
@@ -414,6 +422,7 @@ def main() -> None:
             "peak_window": args.peak_window,
             "trough_window": args.trough_window,
             "min_depth_pct": args.min_depth,
+            "min_duration_days": args.min_duration_days,
         },
         "summary": summary,
         "by_sector": by_sector,

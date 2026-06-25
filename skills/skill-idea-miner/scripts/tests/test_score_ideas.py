@@ -103,147 +103,68 @@ def test_list_existing_skills_skips_nested(score_module, tmp_path: Path):
     assert len(results) == 1
 
 
-# ── merge_into_backlog tests ──
+def test_parse_yaml_frontmatter_valid(score_module):
+    """Valid YAML frontmatter is parsed correctly."""
+    content = "---\nname: Test Skill\ndescription: A test description\n---\n# Content"
+    result = score_module._parse_yaml_frontmatter(content)
+    assert result == {"name": "Test Skill", "description": "A test description"}
 
 
-def test_merge_new_ideas(score_module):
-    """New ideas are added to backlog."""
-    backlog = {"updated_at_utc": "", "ideas": []}
-    candidates = [
-        {"id": "idea_001", "title": "New Idea", "description": "desc", "scores": {"composite": 70}},
-        {"id": "idea_002", "title": "Another", "description": "desc2", "scores": {"composite": 80}},
-    ]
-
-    result = score_module.merge_into_backlog(backlog, candidates)
-
-    assert len(result["ideas"]) == 2
-    assert result["ideas"][0]["id"] == "idea_001"
-    assert result["ideas"][1]["id"] == "idea_002"
-    assert result["updated_at_utc"] != ""
+def test_parse_yaml_frontmatter_no_frontmatter(score_module):
+    """Content without frontmatter returns None."""
+    content = "# Just a markdown file"
+    result = score_module._parse_yaml_frontmatter(content)
+    assert result is None
 
 
-def test_merge_skip_duplicates(score_module):
-    """Ideas with same id are not duplicated in backlog."""
-    backlog = {
-        "updated_at_utc": "2026-02-28T06:15:00Z",
-        "ideas": [
-            {"id": "idea_001", "title": "Existing Idea", "status": "pending"},
-        ],
-    }
-    candidates = [
-        {"id": "idea_001", "title": "Existing Idea Updated", "scores": {"composite": 90}},
-        {"id": "idea_002", "title": "New Idea", "scores": {"composite": 80}},
-    ]
-
-    result = score_module.merge_into_backlog(backlog, candidates)
-
-    assert len(result["ideas"]) == 2
-    # Original idea unchanged
-    assert result["ideas"][0]["title"] == "Existing Idea"
-    # New idea added
-    assert result["ideas"][1]["id"] == "idea_002"
+def test_parse_yaml_frontmatter_malformed(score_module):
+    """Malformed YAML frontmatter returns None."""
+    content = "---\nname: Test Skill\ndescription: - this is bad\n---\n# Content"
+    result = score_module._parse_yaml_frontmatter(content)
+    assert result is None
 
 
-def test_merge_preserves_status(score_module):
-    """Existing idea status is not overwritten by merge."""
-    backlog = {
-        "updated_at_utc": "2026-02-28T06:15:00Z",
-        "ideas": [
-            {
-                "id": "idea_001",
-                "title": "Old Idea",
-                "status": "attempted",
-                "scores": {"composite": 60},
-            },
-        ],
-    }
-    # Candidate with same id tries to change status
-    candidates = [
-        {
-            "id": "idea_001",
-            "title": "Old Idea Revisited",
-            "status": "pending",
-            "scores": {"composite": 90},
-        },
-    ]
-
-    result = score_module.merge_into_backlog(backlog, candidates)
-
-    assert len(result["ideas"]) == 1
-    assert result["ideas"][0]["status"] == "attempted"
-    assert result["ideas"][0]["scores"]["composite"] == 60
+# ── load_backlog tests ──
 
 
-# ── find_duplicates tests ──
-
-
-def test_find_duplicates_marks_similar(score_module):
-    """Candidate with high Jaccard similarity is marked as duplicate."""
-    candidates = [
-        {
-            "id": "cand_001",
-            "title": "Market Breadth Weekly Reporter",
-            "description": "Weekly market breadth summary reports for trading",
-        },
-    ]
-    existing_skills = [
-        {
-            "name": "market-breadth-reporter",
-            "description": "Weekly market breadth summary reports for trading",
-        },
-    ]
-    backlog_ideas = []
-
-    result = score_module.find_duplicates(candidates, existing_skills, backlog_ideas)
-
-    assert result[0].get("status") == "duplicate"
-    assert "skill:market-breadth-reporter" in result[0].get("duplicate_of", "")
-    assert result[0].get("jaccard_score", 0) > score_module.JACCARD_THRESHOLD
-
-
-# ── save_backlog atomic write tests ──
-
-
-def test_save_backlog_writes_valid_yaml(score_module, tmp_path: Path):
-    """save_backlog writes valid YAML that round-trips correctly."""
+def test_load_backlog_existing_valid(score_module, tmp_path: Path):
+    """Loads an existing valid backlog file."""
     backlog_path = tmp_path / "backlog.yaml"
-    backlog = {
+    backlog_data = {
         "updated_at_utc": "2026-03-01T10:00:00Z",
-        "ideas": [
-            {"id": "idea_001", "title": "Test Idea", "scores": {"composite": 75}},
-        ],
+        "ideas": [{"id": "idea_001", "title": "Test Idea"}],
     }
+    backlog_path.write_text(yaml.safe_dump(backlog_data))
 
-    score_module.save_backlog(backlog_path, backlog)
-
-    assert backlog_path.exists()
-    loaded = yaml.safe_load(backlog_path.read_text(encoding="utf-8"))
-    assert loaded["ideas"][0]["id"] == "idea_001"
-    assert loaded["ideas"][0]["scores"]["composite"] == 75
+    result = score_module.load_backlog(backlog_path)
+    assert result == backlog_data
 
 
-def test_save_backlog_no_temp_files_remain(score_module, tmp_path: Path):
-    """After save_backlog, no .tmp files remain in the directory."""
+def test_load_backlog_empty_file(score_module, tmp_path: Path):
+    """Returns empty structure for an empty backlog file."""
     backlog_path = tmp_path / "backlog.yaml"
-    backlog = {"updated_at_utc": "", "ideas": []}
+    backlog_path.write_text("")
 
-    score_module.save_backlog(backlog_path, backlog)
+    result = score_module.load_backlog(backlog_path)
+    assert "ideas" in result
+    assert result["ideas"] == []
 
-    tmp_files = list(tmp_path.glob(".backlog_*.tmp"))
-    assert tmp_files == [], f"Temp files should be cleaned up: {tmp_files}"
+
+def test_load_backlog_non_existent(score_module, tmp_path: Path):
+    """Returns empty structure if backlog file does not exist."""
+    backlog_path = tmp_path / "non_existent_backlog.yaml"
+    result = score_module.load_backlog(backlog_path)
+    assert "ideas" in result
+    assert result["ideas"] == []
 
 
-def test_save_backlog_no_bak_created(score_module, tmp_path: Path):
-    """Atomic write replaces .bak strategy; no .bak file is created."""
-    backlog_path = tmp_path / "backlog.yaml"
-    backlog = {"updated_at_utc": "", "ideas": [{"id": "a"}]}
+def test_load_backlog_malformed(score_module, tmp_path: Path, caplog):
+    """Logs a warning and returns empty structure for a malformed backlog file."""
+    backlog_path = tmp_path / "malformed_backlog.yaml"
+    backlog_path.write_text("not: [valid: yaml]")
 
-    # Write twice to ensure overwrite path doesn't create .bak
-    score_module.save_backlog(backlog_path, backlog)
-    backlog["ideas"].append({"id": "b"})
-    score_module.save_backlog(backlog_path, backlog)
-
-    bak_files = list(tmp_path.glob("*.bak"))
-    assert bak_files == [], f"No .bak files should exist: {bak_files}"
-    loaded = yaml.safe_load(backlog_path.read_text(encoding="utf-8"))
-    assert len(loaded["ideas"]) == 2
+    with caplog.at_level(score_module.logging.WARNING):
+        result = score_module.load_backlog(backlog_path)
+    assert "Failed to load backlog" in caplog.text
+    assert "ideas" in result
+    assert result["ideas"] == []

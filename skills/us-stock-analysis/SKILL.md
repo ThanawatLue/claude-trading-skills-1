@@ -9,6 +9,35 @@ description: Comprehensive US stock analysis including fundamental analysis (fin
 
 Perform comprehensive analysis of US stocks covering fundamental analysis (financials, business quality, valuation), technical analysis (indicators, trends, patterns), peer comparisons, and generate detailed investment reports. Fetch real-time market data via web search tools and apply structured analytical frameworks.
 
+## When to Use
+
+Use this skill when the user requests any form of analysis, information, or comparison related to US stocks. This includes:
+-   **Fetching basic stock information:** Current prices, key metrics, recent news.
+-   **Performing fundamental analysis:** Deep dive into financials, business quality, and valuation.
+-   **Conducting technical analysis:** Chart patterns, indicators, and trend analysis.
+-   **Generating comprehensive investment reports:** Combining fundamental and technical insights with recommendations.
+-   **Comparing multiple US stocks:** Side-by-side analysis of peers.
+
+This skill is suitable for queries such as "analyze AAPL", "compare TSLA vs NVDA", "give me a report on Microsoft", "is Amazon overvalued?", or "technical analysis of TSLA".
+
+## Prerequisites
+
+This skill heavily relies on web search capabilities to fetch real-time and historical market data. Ensure the following tools are available and configured:
+
+-   **`google_web_search`**: This tool is essential for querying financial news, company reports, stock metrics, and technical data from various online sources. It requires proper API key setup (if applicable) and access to function effectively.
+
+Without the proper functioning of `google_web_search`, the skill will be unable to gather the necessary data for analysis.
+
+## Workflow
+
+The `us-stock-analysis` skill follows a systematic workflow to process user requests and generate comprehensive insights:
+
+1.  **Parse User Query**: The skill first interprets the user's natural language request to identify the target stock tickers and the desired type of analysis (e.g., Basic Info, Fundamental, Technical, Comprehensive, Comparison).
+2.  **Data Acquisition**: Using `google_web_search`, the skill fetches relevant market data, financial statements, key metrics, news, and technical indicators for the identified tickers from reliable sources. This step is critical for up-to-date and accurate analysis.
+3.  **Perform Analysis**: Based on the identified analysis type, the skill applies the appropriate analytical frameworks and methodologies (e.g., fundamental ratios, technical patterns, valuation models) to the acquired data. It references internal knowledge bases (`references/fundamental-analysis.md`, `references/technical-analysis.md`, `references/financial-metrics.md`) for detailed guidance.
+4.  **Synthesize and Report**: The analyzed data is then synthesized into a coherent and structured report, formatted according to specified guidelines and report templates (`references/report-template.md`). The output provides clear insights, and where applicable, recommendations or comparisons.
+5.  **Error Handling**: Throughout the process, the skill is equipped to handle scenarios such as invalid tickers, missing data, or API failures, providing informative feedback or fallback mechanisms.
+
 ## Data Sources
 
 Always use web search tools to gather current market data:
@@ -265,30 +294,80 @@ Load these references as needed during analysis:
 - Contains: Complete report structure, formatting guidelines, section templates, comparison format
 
 ## Example Queries
+## Example Queries
 
-**Basic Info:**
-- "What's the current price of AAPL?"
-- "Give me key metrics for Tesla"
-- "Quick overview of Microsoft stock"
+The following examples demonstrate how to invoke the `us-stock-analysis` skill using `invoke_skill` with various parameters for different analysis types.
 
-**Fundamental:**
-- "Analyze NVDA's financials"
-- "Is Amazon overvalued?"
-- "Evaluate Apple's business quality"
-- "What's Google's debt situation?"
+### Python `invoke_skill` Examples
 
-**Technical:**
-- "Technical analysis of TSLA"
-- "Is Netflix oversold?"
-- "Show me support levels for AAPL"
-- "What's the trend for AMD?"
+```bash
+# Basic Stock Information for Apple
+invoke_skill('us-stock-analysis', ticker='AAPL', analysis_type='basic')
 
-**Comprehensive:**
-- "Complete analysis of Microsoft"
-- "Give me a full report on AAPL"
-- "Should I invest in Tesla? Give me detailed analysis"
+# Fundamental Analysis for Nvidia
+invoke_skill('us-stock-analysis', ticker='NVDA', analysis_type='fundamental')
 
-**Comparison:**
-- "Compare AAPL vs MSFT"
-- "Tesla vs Nvidia - which is better?"
-- "Analyze Meta vs Google"
+# Technical Analysis for Tesla
+invoke_skill('us-stock-analysis', ticker='TSLA', analysis_type='technical')
+
+# Comprehensive Report for Microsoft
+invoke_skill('us-stock-analysis', ticker='MSFT', analysis_type='comprehensive')
+
+# Comparison of Apple vs. Microsoft
+invoke_skill('us-stock-analysis', ticker=['AAPL', 'MSFT'], analysis_type='comparison')
+
+# Basic Stock Information for Google (Alphabet Class A)
+invoke_skill('us-stock-analysis', ticker='GOOGL', analysis_type='basic')
+
+# Fundamental Analysis for Amazon, checking for overvaluation
+invoke_skill('us-stock-analysis', ticker='AMZN', analysis_type='fundamental', query_context='Is Amazon overvalued?')
+```
+
+### Python Examples
+
+```python
+# Basic Stock Information for Apple
+invoke_skill('us-stock-analysis', ticker='AAPL', analysis_type='basic')
+
+# Fundamental Analysis for Nvidia
+invoke_skill('us-stock-analysis', ticker='NVDA', analysis_type='fundamental')
+
+# Technical Analysis for Tesla
+invoke_skill('us-stock-analysis', ticker='TSLA', analysis_type='technical')
+
+# Comprehensive Report for Microsoft
+invoke_skill('us-stock-analysis', ticker='MSFT', analysis_type='comprehensive')
+
+# Comparison of Apple vs. Microsoft
+invoke_skill('us-stock-analysis', ticker=['AAPL', 'MSFT'], analysis_type='comparison')
+
+# Basic Stock Information for Google (Alphabet Class A)
+invoke_skill('us-stock-analysis', ticker='GOOGL', analysis_type='basic')
+
+# Fundamental Analysis for Amazon, checking for overvaluation
+invoke_skill('us-stock-analysis', ticker='AMZN', analysis_type='fundamental', query_context='Is Amazon overvalued?')
+```
+
+## Error Handling and Limitations
+
+This section outlines how the skill manages errors, known limitations, and fallback strategies to ensure robust operation.
+
+### Error Handling
+
+-   **Invalid Ticker Symbols**: If an invalid or unrecognized ticker symbol is provided, the skill will return an error message indicating that the ticker could not be found and suggest verifying the symbol.
+-   **Missing Data**: In cases where essential data (e.g., financial statements, key metrics) cannot be retrieved via web search, the skill will report the missing data and attempt to proceed with available information, clearly stating any gaps in the analysis. For critical missing data, it may indicate that a full analysis cannot be performed.
+-   **Web Search Failures**: If `google_web_search` encounters issues (e.g., API errors, rate limits, no relevant results), the skill will notify the user of the search failure and may suggest retrying the operation or performing a manual search.
+-   **API Limitations**: Be aware of potential rate limits or access restrictions from data sources. The skill will attempt to handle these gracefully, but persistent issues may require manual intervention or a different data acquisition strategy.
+
+### Limitations
+
+-   **Real-time Data**: While the skill attempts to fetch the most current data, there might be a slight delay in real-time information due to the nature of web scraping and data aggregation. It is not designed for ultra-low latency trading decisions.
+-   **Data Interpretation**: The skill performs analysis based on structured frameworks. Nuance in qualitative factors (e.g., management quality, competitive landscape) is interpreted from available textual data, but human judgment may still offer deeper insights.
+-   **Completeness of Information**: The comprehensiveness of the analysis is dependent on the availability and quality of information accessible via web search. Proprietary or paywalled data will not be included.
+-   **Recommendation Disclaimer**: Any investment recommendations generated are based on algorithmic analysis and publicly available data. They should not be considered as financial advice without independent verification and consultation with a financial professional.
+
+### Fallback Strategies
+
+-   If a primary data source fails, the skill should attempt to query alternative reputable sources.
+-   If a specific analysis type cannot be fully completed due to missing data, the skill will inform the user and provide the most complete analysis possible with the available information.
+-   For persistent issues with `google_web_search`, manual intervention by the agent to perform web searches and provide the data to the skill might be necessary.

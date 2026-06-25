@@ -13,19 +13,11 @@ Unlike the Market Top Detector (API-based risk scorer), this skill uses free CSV
 
 ## When to Use This Skill
 
-**English:**
 - User asks "Is the market breadth healthy?" or "How broad is the rally?"
 - User wants to assess uptrend ratios across sectors
 - User asks about market participation or breadth conditions
 - User needs exposure guidance based on breadth analysis
 - User references Monty's Uptrend Dashboard or uptrend ratios
-
-**Japanese:**
-- 「市場のブレドスは健全？」「上昇の裾野は広い？」
-- セクター別のアップトレンド比率を確認したい
-- 相場参加率・ブレドス状況を診断したい
-- ブレドス分析に基づくエクスポージャーガイダンスが欲しい
-- Montyのアップトレンドダッシュボードについて質問
 
 ## Difference from Market Top Detector
 
@@ -124,6 +116,10 @@ The Historical Context component includes a confidence assessment based on:
 Confidence levels: High, Medium, Low.
 
 ---
+
+## Prerequisites
+- Python 3
+- pip (Python package installer)
 
 ## API Requirements
 

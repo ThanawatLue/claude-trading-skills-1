@@ -3,6 +3,19 @@ name: parabolic-short-trade-planner
 description: Screen US equities for parabolic exhaustion patterns and generate conditional pre-market short plans, then evaluate intraday trigger fires from live 5-min bars. Phase 1 daily 5-factor scorer (MA extension / acceleration / volume climax / range expansion / liquidity), Phase 2 per-candidate plans for ORL break / first-red 5-min / VWAP fail with explicit borrow / SSR / manual-confirmation gating, Phase 3 one-shot intraday FSM that detects trigger fires and resolves concrete share counts. Covers Phase 1 + Phase 2 + Phase 3.
 ---
 
+## Prerequisites
+
+This skill requires an API key for Financial Modeling Prep (FMP) to fetch market data.
+
+To set up your FMP API key:
+1. Obtain an API key from Financial Modeling Prep.
+2. Set it as an environment variable:
+   ```bash
+   export FMP_API_KEY="YOUR_FMP_API_KEY"
+   ```
+   (Replace `"YOUR_FMP_API_KEY"` with your actual key.)
+   Alternatively, you can pass it via the `--api-key` flag during execution of Phase 1.
+
 ## Overview
 
 Generate Qullamaggie-style Parabolic Short watchlists and conditional

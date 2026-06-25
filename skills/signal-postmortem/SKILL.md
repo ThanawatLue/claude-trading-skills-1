@@ -25,6 +25,10 @@ Signal Postmortem records and analyzes the outcomes of trading signals generated
 - Standard library + `requests` for API calls
 - Input: signal records in JSON format (from edge-signal-aggregator or screener outputs)
 
+### Dependencies
+
+For comprehensive regime detection (`regime_at_signal`, `regime_at_exit`), this skill relies on macro regime data. Ensure that `reports/macro_regime/macro_regime_YYYY-MM-DD_HHMMSS.json` files are generated and available. These files are typically produced by a `macro-regime-detector` skill or similar.
+
 ### API Key Setup (Optional)
 
 If you want to automatically fetch price data for return calculations, set up the FMP API key:
@@ -47,6 +51,8 @@ Gather closed or matured signal records. Each record should include:
 - `source_skill`: Which skill generated the signal
 - `entry_price`: Price at signal generation (optional, for manual override)
 
+**Note on Batch Processing Inputs**: For batch processing, `--signals-file` expects a single JSON file containing either a list of signal objects or a JSON object with a key 'signals' pointing to a list of signals. The `--signals-dir` argument is used specifically with `--list-ready` to process signals across multiple files within a directory.
+
 ```bash
 # Example: List signals ready for postmortem (5+ days old)
 python3 skills/signal-postmortem/scripts/postmortem_recorder.py \
@@ -68,9 +74,12 @@ python3 skills/signal-postmortem/scripts/postmortem_recorder.py \
 
 For manual outcome recording (when price data is already available):
 
+The `--signal-id` for manual recording should follow the format: `sig_<TICKER>_<YYYYMMDD>_<UNIQUE_SUFFIX>`.
+For example: `sig_AAPL_20260310_abc` where `AAPL` is the ticker, `20260310` is the signal date, and `abc` is a unique suffix.
+
 ```bash
 python3 skills/signal-postmortem/scripts/postmortem_recorder.py \
-  --signal-id sig_aapl_20260310_abc \
+  --signal-id sig_AAPL_20260310_abc \
   --exit-price 178.50 \
   --exit-date 2026-03-15 \
   --outcome-notes "Closed at target, +3.2% in 5 days" \
@@ -84,11 +93,19 @@ The recorder automatically classifies each signal into one of four categories:
 | Category | Definition |
 |----------|------------|
 | TRUE_POSITIVE | Predicted direction matched realized return sign |
-| FALSE_POSITIVE | Predicted direction opposite to realized return |
-| MISSED_OPPORTUNITY | Signal not taken but would have been profitable |
+| FALSE_POSITIVE | Predicted direction opposite to realized return (includes `FALSE_POSITIVE_SEVERE`) |
 | REGIME_MISMATCH | Signal failed due to market regime change |
+| NEUTRAL | Signal outcome was flat (return below threshold) |
 
 Classification rules are documented in `references/outcome-classification.md`.
+
+## Future Classification Categories
+
+### MISSED_OPPORTUNITY (Future Feature)
+
+**Definition**: A signal not taken but would have been profitable.
+
+**Note**: This category is currently not implemented in `postmortem_recorder.py` and is planned for a future release.
 
 ### Step 4: Generate Feedback Files
 

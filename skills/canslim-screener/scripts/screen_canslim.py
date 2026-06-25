@@ -17,6 +17,13 @@ Output:
 import argparse
 import os
 import sys
+
+# Ensure UTF-8 output on Windows
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
+
 from datetime import datetime
 from typing import Optional
 
@@ -143,6 +150,13 @@ def parse_arguments():
         ),
     )
 
+    parser.add_argument(
+        "--market",
+        choices=["US", "TH"],
+        default="US",
+        help="Target market: US (S&P 500) or TH (SET50) (default: US)",
+    )
+
     return parser.parse_args()
 
 
@@ -153,6 +167,7 @@ def analyze_stock(
     rs_benchmark_historical: Optional[dict] = None,
     rs_benchmark: str = "^GSPC",
     disable_rs: bool = False,
+    market: str = "US",
 ) -> Optional[dict]:
     """
     Analyze a single stock using CANSLIM Phase 3 components (7 components: C, A, N, S, L, I, M)
@@ -291,7 +306,7 @@ def analyze_stock(
 
         # I Component: Institutional Sponsorship
         # YFClient returns a different shape — normalise before passing to calculator
-        if hasattr(client, "get_institutional_ownership"):
+        if _YF_AVAILABLE and isinstance(client, YFClient):
             inst_data = client.get_institutional_ownership(symbol)
             if inst_data:
                 # Wrap into the FMP-style shape the calculator expects
@@ -322,6 +337,7 @@ def analyze_stock(
             l_score=l_result.get("score", 0),
             i_score=i_result.get("score", 0),
             m_score=m_result.get("score", 50),
+            market=market,
         )
 
         # Check minimum thresholds (Phase 3)
@@ -333,6 +349,7 @@ def analyze_stock(
             l_score=l_result.get("score", 0),
             i_score=i_result.get("score", 0),
             m_score=m_result.get("score", 50),
+            market=market,
         )
 
         print(f"✓ Score: {composite['composite_score']:.1f} ({composite['rating']})")
@@ -376,9 +393,10 @@ def main():
     print("=" * 60)
     print()
 
-    # Initialize client — use YFClient when FMP key is absent
+    # Initialize client — use YFClient when FMP key is absent or market is TH
     api_key = args.api_key or os.environ.get("FMP_API_KEY", "")
-    use_yfinance = not api_key and _YF_AVAILABLE
+    use_yfinance = (not api_key or args.market == "TH") and _YF_AVAILABLE
+
 
     if use_yfinance:
         client = YFClient()
@@ -400,6 +418,18 @@ def main():
     if args.universe:
         universe = args.universe[: args.max_candidates]
         print(f"✓ Custom universe: {len(universe)} stocks")
+    elif args.market == "TH":
+        if hasattr(client, "get_thai_constituents"):
+            thai_stocks = client.get_thai_constituents()
+            if thai_stocks:
+                universe = [s["symbol"] for s in thai_stocks][: args.max_candidates]
+                print(f"✓ Thai SET50 universe: {len(universe)} stocks")
+            else:
+                universe = []
+                print("⚠️ Thai constituents fetch failed")
+        else:
+            universe = []
+            print("⚠️ Client does not support get_thai_constituents")
     elif use_yfinance and hasattr(client, "get_sp500_constituents"):
         sp500 = client.get_sp500_constituents()
         if sp500:
@@ -418,49 +448,52 @@ def main():
     print("Step 1: Analyzing Market Direction (M Component)")
     print("-" * 60)
 
-    sp500_quote = client.get_quote("^GSPC")
-    vix_quote = client.get_quote("^VIX")
+    benchmark_symbol = "^SET.BK" if args.market == "TH" else "^GSPC"
+    sp500_quote = client.get_quote(benchmark_symbol)
+    vix_quote = client.get_quote("^VIX") if args.market == "US" else None
 
     if not sp500_quote:
-        print("ERROR: Unable to fetch S&P 500 data", file=sys.stderr)
+        print(f"ERROR: Unable to fetch {benchmark_symbol} data", file=sys.stderr)
         sys.exit(1)
 
-    # Fetch ^GSPC historical prices for the M component. ^GSPC must remain the
-    # benchmark for the M component to keep scale consistent with the ^GSPC quote
-    # (see test_canslim_fixes.py::TestBenchmarkScaleConsistency).
-    print("Fetching ^GSPC 52-week data for M component (EMA)...")
-    market_sp500_historical = client.get_historical_prices("^GSPC", days=365)
+    # Fetch historical prices for the M component.
+    print(f"Fetching {benchmark_symbol} 52-week data for M component (EMA)...")
+    market_sp500_historical = client.get_historical_prices(benchmark_symbol, days=365)
     if market_sp500_historical and market_sp500_historical.get("historical"):
         market_days = len(market_sp500_historical.get("historical", []))
-        print(f"✓ ^GSPC historical data: {market_days} days")
+        print(f"✓ {benchmark_symbol} historical data: {market_days} days")
     else:
-        print("⚠️  ^GSPC historical data unavailable - M component will use EMA fallback")
+        print(f"⚠️  {benchmark_symbol} historical data unavailable - M component will use EMA fallback")
 
-    # Resolve the L component's benchmark fetch. When the user kept the default
-    # ^GSPC, reuse the already-fetched series (FMPClient cache also covers this,
-    # but the explicit reuse here documents the intent). When --disable-rs is
-    # set, skip the benchmark fetch entirely.
+    # Set default benchmark based on market if not explicitly overridden by user
+    rs_benchmark = args.rs_benchmark
+    if args.market == "TH" and args.rs_benchmark == "^GSPC":
+        rs_benchmark = "^SET.BK"
+
+    # Resolve the L component's benchmark fetch.
     rs_benchmark_historical = None
     if not args.disable_rs:
-        if args.rs_benchmark == "^GSPC":
+        if rs_benchmark == "^GSPC" and args.market == "US":
+            rs_benchmark_historical = market_sp500_historical
+        elif rs_benchmark == "^SET.BK" and args.market == "TH":
             rs_benchmark_historical = market_sp500_historical
         else:
             print(
-                f"Fetching {args.rs_benchmark} 52-week data for L component (Relative Strength)..."
+                f"Fetching {rs_benchmark} 52-week data for L component (Relative Strength)..."
             )
-            rs_benchmark_historical = client.get_historical_prices(args.rs_benchmark, days=365)
+            rs_benchmark_historical = client.get_historical_prices(rs_benchmark, days=365)
             if rs_benchmark_historical and rs_benchmark_historical.get("historical"):
                 rs_days = len(rs_benchmark_historical.get("historical", []))
-                print(f"✓ {args.rs_benchmark} historical data: {rs_days} days")
+                print(f"✓ {rs_benchmark} historical data: {rs_days} days")
             else:
                 print(
-                    f"⚠️  {args.rs_benchmark} historical data unavailable - "
+                    f"⚠️  {rs_benchmark} historical data unavailable - "
                     "L component will fall back to absolute performance with 20% penalty"
                 )
     else:
         print("⚠️  --disable-rs set: L component will be fixed at neutral 50 (no RS fetch)")
 
-    # Calculate M component using real ^GSPC historical prices for accurate EMA
+    # Calculate M component using real historical prices for accurate EMA
     market_sp500_list = (
         market_sp500_historical.get("historical", []) if market_sp500_historical else []
     )
@@ -468,9 +501,10 @@ def main():
         sp500_quote=sp500_quote[0],
         sp500_prices=market_sp500_list if market_sp500_list else None,
         vix_quote=vix_quote[0] if vix_quote else None,
+        index_name="SET Index" if args.market == "TH" else "S&P 500",
     )
 
-    print(f"S&P 500: ${market_data['sp500_price']:.2f}")
+    print(f"{benchmark_symbol}: ${market_data['sp500_price']:.2f}")
     print(f"Distance from 50-EMA: {market_data['distance_from_ema_pct']:+.2f}%")
     print(f"Trend: {market_data['trend']}")
     print(f"M Score: {market_data['score']}/100")
@@ -494,8 +528,9 @@ def main():
             client,
             market_data,
             rs_benchmark_historical=rs_benchmark_historical,
-            rs_benchmark=args.rs_benchmark,
+            rs_benchmark=rs_benchmark,
             disable_rs=args.disable_rs,
+            market=args.market,
         )
         if analysis:
             results.append(analysis)
@@ -533,8 +568,9 @@ def main():
         "candidates_analyzed": len(results),
         "universe_size": len(universe),
         "screening_options": {
-            "rs_benchmark": args.rs_benchmark,
+            "rs_benchmark": rs_benchmark,
             "rs_disabled": args.disable_rs,
+            "market": args.market,
         },
         "market_condition": {
             "trend": market_data["trend"],
@@ -569,8 +605,9 @@ def main():
             f"(3 market data calls + {len(universe)} stocks × 6 API calls each, --disable-rs)"
         )
     else:
-        # Custom benchmark adds one extra fetch when it differs from ^GSPC.
-        market_calls = 3 if args.rs_benchmark == "^GSPC" else 4
+        # Custom benchmark adds one extra fetch when it differs from ^GSPC/SET.BK.
+        default_bench = "^SET.BK" if args.market == "TH" else "^GSPC"
+        market_calls = 3 if rs_benchmark == default_bench else 4
         print(
             f"  Estimated calls: ~{len(universe) * 7 + market_calls} "
             f"({market_calls} market data calls + {len(universe)} stocks × 7 API calls each)"

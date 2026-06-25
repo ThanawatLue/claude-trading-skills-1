@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import re
 import subprocess
 import sys
@@ -15,6 +16,9 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logger = logging.getLogger(__name__)
 
 DEFAULT_EXPORTABLE_FAMILIES = {
     "pivot_breakout",
@@ -89,6 +93,7 @@ def run_stage(stage: str, args: list[str], cwd: str | None = None) -> subprocess
         text=True,
         capture_output=True,
         cwd=cwd,
+        timeout=1800,
     )
 
     if result.returncode != 0:
@@ -107,9 +112,12 @@ def load_drafts_from_dir(drafts_dir: Path) -> list[dict[str, Any]]:
     """Load all draft YAML files from a directory."""
     drafts: list[dict[str, Any]] = []
     for path in sorted(drafts_dir.glob("*.yaml")):
-        payload = yaml.safe_load(path.read_text())
-        if isinstance(payload, dict) and payload.get("id"):
-            drafts.append(payload)
+        try:
+            payload = yaml.safe_load(path.read_text())
+            if isinstance(payload, dict) and payload.get("id"):
+                drafts.append(payload)
+        except yaml.YAMLError as exc:
+            logger.warning(f"Failed to parse YAML draft {path.name}: {exc}")
     return drafts
 
 
@@ -127,18 +135,24 @@ def load_reviews_from_dir(reviews_dir: Path) -> list[dict[str, Any]]:
     for name in ("review.yaml", "review.json"):
         consolidated = reviews_dir / name
         if consolidated.exists():
-            payload = yaml.safe_load(consolidated.read_text())
-            if isinstance(payload, dict) and isinstance(payload.get("reviews"), list):
-                for r in payload["reviews"]:
-                    if isinstance(r, dict) and r.get("draft_id"):
-                        reviews.append(r)
-                return reviews
+            try:
+                payload = yaml.safe_load(consolidated.read_text())
+                if isinstance(payload, dict) and isinstance(payload.get("reviews"), list):
+                    for r in payload["reviews"]:
+                        if isinstance(r, dict) and r.get("draft_id"):
+                            reviews.append(r)
+                    return reviews
+            except yaml.YAMLError as exc:
+                logger.warning(f"Failed to parse consolidated review {name}: {exc}")
 
     # Format 2: per-draft *_review.yaml files
     for path in sorted(reviews_dir.glob("*_review.yaml")):
-        payload = yaml.safe_load(path.read_text())
-        if isinstance(payload, dict) and payload.get("draft_id"):
-            reviews.append(payload)
+        try:
+            payload = yaml.safe_load(path.read_text())
+            if isinstance(payload, dict) and payload.get("draft_id"):
+                reviews.append(payload)
+        except yaml.YAMLError as exc:
+            logger.warning(f"Failed to parse per-draft review {path.name}: {exc}")
     return reviews
 
 
@@ -698,7 +712,7 @@ def main() -> int:
     except EdgePipelineError as exc:
         manifest["status"] = "failed"
         manifest["error"] = str(exc)
-        print(f"[ERROR] {exc}", file=sys.stderr)
+        logger.error(f"Pipeline failed: {exc}")
         manifest_path = output_dir / "pipeline_run_manifest.json"
         manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
         return 1
@@ -706,8 +720,8 @@ def main() -> int:
     manifest_path = output_dir / "pipeline_run_manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
 
-    print(
-        f"[OK] pipeline={run_id} "
+    logger.info(
+        f"Pipeline {run_id} completed. "
         f"passed={len(review_result.passed)} "
         f"rejected={len(review_result.rejected)} "
         f"downgraded={len(review_result.downgraded)} "

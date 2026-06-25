@@ -121,3 +121,4 @@ For each top candidate, present:
 - `references/vcp_methodology.md` - VCP theory and Trend Template explanation
 - `references/scoring_system.md` - Scoring thresholds and component weights
 - `references/fmp_api_endpoints.md` - API endpoints and rate limits
+- **Strategy Expectancy Calibration**: The screener can display a "Strategy Expectancy" based on historical closed trades. This feature uses the `get_recent_expectancy` function which directly queries the `state/market_cache.db` SQLite database, specifically the `paper_trade` table. To enable this, ensure you have a `market_cache.db` file in the `state/` directory with a `paper_trade` table containing `realized_r` and `source` columns. The `source` column should match "vcp-screener" or "vcp".

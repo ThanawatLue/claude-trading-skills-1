@@ -3,7 +3,7 @@ layout: default
 title: "Technical Analyst"
 grand_parent: English
 parent: Skill Guides
-nav_order: 42
+nav_order: 57
 lang_peer: /ja/skills/technical-analyst/
 permalink: /en/skills/technical-analyst/
 ---
@@ -34,22 +34,31 @@ This skill enables comprehensive technical analysis of weekly price charts. Anal
 
 ---
 
-## 2. Prerequisites
+## 2. When to Use
 
-- Image-based chart analysis
-- Python 3.9+ recommended
+- User provides weekly chart images (stocks, indices, crypto, forex) and requests technical analysis
+- Need to identify trend direction, strength, and potential reversal points
+- Looking for support/resistance levels and key price zones
+- Want probabilistic scenario planning with specific price targets
+- Require objective chart-based analysis without fundamental or news considerations
 
 ---
 
-## 3. Quick Start
+## 3. Prerequisites
+
+- **No API Keys Required**: This skill analyzes user-provided images; no external data fetches
+
+---
+
+## 4. Quick Start
 
 ```bash
-Read: references/technical_analysis_framework.md
+Read: ./references/technical_analysis_framework.md
 ```
 
 ---
 
-## 4. Workflow
+## 5. Workflow
 
 ### Step 1: Receive Chart Images
 
@@ -65,7 +74,7 @@ When the user provides one or more weekly chart images for analysis:
 Before beginning analysis, read the comprehensive technical analysis methodology:
 
 ```
-Read: references/technical_analysis_framework.md
+Read: ./references/technical_analysis_framework.md
 ```
 
 This reference contains detailed guidance on:
@@ -147,7 +156,7 @@ Adjust probabilities based on strength of supporting technical factors. Ensure p
 For each chart analyzed, create a comprehensive markdown report using the template structure:
 
 ```
-Read and use as template: assets/analysis_template.md
+Read and use as template: ./assets/analysis_template.md
 ```
 
 The report must include all sections:
@@ -164,7 +173,7 @@ The report must include all sections:
 
 **File Naming Convention**: Save each analysis as `[SYMBOL]_technical_analysis_[YYYY-MM-DD].md`
 
-Example: `SPY_technical_analysis_2025-11-02.md`
+Example: `SPY_technical_analysis_[CURRENT_DATE].md`
 
 ### Step 6: Repeat for Multiple Charts
 
@@ -179,7 +188,7 @@ Do not batch analyses. Complete and save each report before moving to the next c
 
 ---
 
-## 5. Resources
+## 6. Resources
 
 **References:**
 

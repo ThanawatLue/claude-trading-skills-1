@@ -23,7 +23,15 @@ import argparse
 import os
 import sys
 
-from PIL import Image, ImageDraw, ImageFont
+try:
+    from PIL import Image, ImageDraw, ImageFont
+except ImportError:
+    print(
+        "ERROR: The 'Pillow' library is not installed. "
+        "Please install it using 'pip install Pillow'",
+        file=sys.stderr,
+    )
+    sys.exit(1)
 
 
 def extract_right_edge(image_path: str, right_percentage: int = 25, output_path: str = None) -> str:
@@ -94,11 +102,7 @@ def extract_right_edge_with_marker(
     draw.line([(left, 0), (left, height)], fill=line_color, width=line_width)
 
     # Add text label
-    try:
-        # Try to use a default font
-        font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 20)
-    except Exception:
-        font = ImageFont.load_default()
+    font = ImageFont.load_default()
 
     label = f"← Analysis Region ({right_percentage}%)"
     draw.text((left + 10, 10), label, fill=line_color, font=font)

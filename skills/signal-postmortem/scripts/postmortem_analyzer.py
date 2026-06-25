@@ -12,6 +12,7 @@ import sys
 from collections import defaultdict
 from datetime import datetime, timedelta
 from pathlib import Path
+import yaml
 
 
 def load_postmortems(postmortems_dir: str, days_back: int = 90) -> list:
@@ -486,21 +487,9 @@ def main():
         backlog = generate_improvement_backlog(metrics, postmortems, min(15, args.min_sample_size))
         output_file = output_dir / f"skill_improvement_backlog_{timestamp}.yaml"
 
-        # Write as YAML-like format
+        # Write as YAML
         with open(output_file, "w") as f:
-            for entry in backlog:
-                f.write(f"- skill: {entry['skill']}\n")
-                f.write(f"  issue_type: {entry['issue_type']}\n")
-                f.write(f"  severity: {entry['severity']}\n")
-                f.write("  evidence:\n")
-                for k, v in entry["evidence"].items():
-                    f.write(f"    {k}: {v}\n")
-                f.write(f'  suggested_action: "{entry["suggested_action"]}"\n')
-                f.write(f"  priority_score: {entry['priority_score']}\n")
-                f.write(f"  generated_by: {entry['generated_by']}\n")
-                f.write(f'  generated_at: "{entry["generated_at"]}"\n')
-                f.write(f"  status: {entry['status']}\n")
-                f.write("\n")
+            yaml.dump(backlog, f, sort_keys=False)
 
         print(f"Saved improvement backlog: {output_file}")
         print(f"  Entries: {len(backlog)}")

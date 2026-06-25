@@ -1,11 +1,11 @@
 ---
 name: skill-idea-miner
-description: Mine Claude Code session logs for skill idea candidates. Use when running the weekly skill generation pipeline to extract, score, and backlog new skill ideas from recent coding sessions.
+description: Mine Gemini Code session logs for skill idea candidates. Use when running the weekly skill generation pipeline to extract, score, and backlog new skill ideas from recent coding sessions.
 ---
 
 # Skill Idea Miner
 
-Automatically extract skill idea candidates from Claude Code session logs,
+Automatically extract skill idea candidates from Gemini Code session logs,
 score them for novelty, feasibility, and trading value, and maintain a
 prioritized backlog for downstream skill generation.
 
@@ -18,9 +18,9 @@ prioritized backlog for downstream skill generation.
 ## Prerequisites
 
 - **Python 3.10+** with `pyyaml` package
-- **Claude CLI** installed and authenticated (`claude --version` to verify)
-- **Session logs** in `~/.claude/projects/<project>/` (created automatically by Claude Code)
-- No API keys required (uses Claude CLI for LLM calls)
+- **Gemini CLI** installed and authenticated (`gemini --version` to verify)
+- **Session logs** in `~/.gemini/projects/<project>/` (created automatically by Gemini Code)
+- No API keys required (uses Gemini CLI for LLM calls)
 
 ## Workflow
 
@@ -30,7 +30,7 @@ prioritized backlog for downstream skill generation.
 # Dry-run: preview mined candidates without LLM scoring
 python3 scripts/mine_session_logs.py --dry-run --output-dir reports/
 
-# Full mining with scoring (requires Claude CLI)
+# Full mining with scoring (requires Gemini CLI)
 python3 scripts/mine_session_logs.py --output-dir reports/
 
 # Score existing candidates
@@ -41,7 +41,7 @@ python3 scripts/score_ideas.py \
 
 ### Stage 1: Session Log Mining
 
-1. Enumerate session logs from allowlist projects in `~/.claude/projects/`
+1. Enumerate session logs from allowlist projects in `~/.gemini/projects/`
 2. Filter to past 7 days by file mtime, confirm with `timestamp` field
 3. Extract user messages (`type: "user"`, `userType: "external"`)
 4. Extract tool usage patterns from assistant messages
@@ -51,7 +51,7 @@ python3 scripts/score_ideas.py \
    - Repetitive tool sequences (3+ tools repeated 3+ times)
    - Automation request keywords (English and Japanese)
    - Unresolved requests (5+ minute gap after user message)
-6. Invoke Claude CLI headless for idea abstraction
+6. Invoke Gemini CLI headless for idea abstraction
 7. Output `raw_candidates.yaml`
 
 ### Stage 2: Scoring and Deduplication
@@ -60,7 +60,7 @@ python3 scripts/score_ideas.py \
 2. Deduplicate via Jaccard similarity (threshold > 0.5) against:
    - Existing skill names and descriptions
    - Existing backlog ideas
-3. Score non-duplicate candidates with Claude CLI:
+3. Score non-duplicate candidates with Gemini CLI:
    - Novelty (0-100): differentiation from existing skills
    - Feasibility (0-100): technical implementability
    - Trading Value (0-100): practical value for investors/traders
@@ -74,12 +74,12 @@ python3 scripts/score_ideas.py \
 ```yaml
 generated_at_utc: "2026-03-08T06:00:00Z"
 period: {from: "2026-03-01", to: "2026-03-07"}
-projects_scanned: ["claude-trading-skills"]
+projects_scanned: ["gemini-trading-skills"]
 sessions_scanned: 12
 candidates:
   - id: "raw_2026w10_001"
     title: "Earnings Whispers Image Parser"
-    source_project: "claude-trading-skills"
+    source_project: "gemini-trading-skills"
     evidence:
       user_requests: ["Extract earnings dates from screenshot"]
       pain_points: ["Manual image reading"]

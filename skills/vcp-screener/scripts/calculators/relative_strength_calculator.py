@@ -62,8 +62,8 @@ def calculate_relative_strength(
             "error": "Insufficient S&P 500 price data (need 63+ days)",
         }
 
-    stock_closes = [d.get("close", d.get("adjClose", 0)) for d in stock_prices]
-    sp500_closes = [d.get("close", d.get("adjClose", 0)) for d in sp500_prices]
+    stock_closes = [float(d.get("close") or d.get("adjClose") or 0) for d in stock_prices]
+    sp500_closes = [float(d.get("close") or d.get("adjClose") or 0) for d in sp500_prices]
 
     weighted_rs = 0.0
     total_weight = 0.0
@@ -133,7 +133,7 @@ def calculate_relative_strength(
 
 def _period_return(closes: list[float], period: int) -> float:
     """Calculate return over period. Closes are most-recent-first."""
-    if len(closes) <= period or closes[period] <= 0:
+    if len(closes) <= period or closes[period] is None or closes[0] is None or closes[period] <= 0:
         return 0.0
     return ((closes[0] - closes[period]) / closes[period]) * 100
 

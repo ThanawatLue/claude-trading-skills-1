@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Mine Claude Code session logs for skill idea candidates."""
+"""Mine Gemini Code session logs for skill idea candidates."""
 
 from __future__ import annotations
 
@@ -16,6 +16,8 @@ from pathlib import Path
 
 # Add project scripts directory to sys.path to import gemini_adapter
 # Structure: skills/skill-idea-miner/scripts/mine_session_logs.py -> 4 levels up to root
+# This import mechanism is fragile. For a more robust solution, ensure 'scripts'
+# is part of PYTHONPATH or refactor 'gemini_adapter' into a proper package.
 project_root = Path(__file__).parent.parent.parent.parent
 scripts_dir = project_root / "scripts"
 if str(scripts_dir) not in sys.path:
@@ -30,14 +32,14 @@ import yaml
 logger = logging.getLogger("skill_idea_miner")
 
 PROJECT_ALLOWLIST = [
-    "claude-trading-skills",
-    "claude-market-agents",
+    "gemini-trading-skills",
+    "gemini-market-agents",
     "trade-edge-finder",
     "trade-strategy-pipeline",
     "weekly-trade-strategy",
 ]
 
-GEMINI_TIMEOUT = 600   # renamed from CLAUDE_TIMEOUT
+
 LOOKBACK_DAYS = 7
 MAX_USER_MESSAGES_PER_SESSION = 5
 MAX_ERROR_OUTPUT_LEN = 500
@@ -95,7 +97,7 @@ def find_project_dirs(
     base_dir: Path,
     allowlist: list[str] | None = None,
 ) -> list[tuple[str, Path]]:
-    """Scan ~/.claude/projects/ for directories matching allowlist.
+    """Scan ~/.gemini/projects/ for directories matching allowlist.
 
     Directory encoding: `-Users-username-PycharmProjects-{project}` maps to
     the last path segment as the project name.
@@ -113,13 +115,11 @@ def find_project_dirs(
         if not child.is_dir():
             continue
         # Directory name is encoded as dash-separated absolute path segments.
-        # The project name is the last segment.
-        for proj in allowlist:
-            # Project name may itself contain dashes, so check if the dir name
-            # ends with the project name (after the path encoding).
-            if child.name.endswith(f"-{proj}") or child.name == proj:
-                matches.append((proj, child))
-                break
+        # The actual project name is the last segment.
+        encoded_project_name = child.name.split("-")[-1]
+        if encoded_project_name in allowlist:
+            matches.append((encoded_project_name, child))
+            break
 
     return matches
 
@@ -367,7 +367,7 @@ def _detect_repetitive_patterns(tool_uses: list[dict]) -> dict:
 
 
 def _is_automated_prompt(msg: str) -> bool:
-    """Check if a message is an automated Claude -p prompt (not a real user request)."""
+    """Check if a message is an automated Gemini -p prompt (not a real user request)."""
     stripped = msg.strip()
     for prefix in AUTOMATED_PROMPT_PREFIXES:
         if stripped.startswith(prefix):
@@ -378,7 +378,7 @@ def _is_automated_prompt(msg: str) -> bool:
 def _detect_automation_requests(user_messages: list[str]) -> dict:
     """Detect automation-related keywords in user messages.
 
-    Excludes automated prompts from Claude -p invocations (e.g., skill
+    Excludes automated prompts from Gemini -p invocations (e.g., skill
     improvement loop, scoring pipelines) to avoid false positives.
     """
     keywords = [
@@ -474,17 +474,24 @@ def abstract_with_llm(
     project_name: str,
     dry_run: bool = False,
     trading_focus: bool = True,
+    model_name: str = "gemini-3-flash-preview",  # Add model_name argument
 ) -> list[dict] | None:
     """Use Gemini to abstract skill idea candidates from signals."""
-    if dry_run or not gemini_adapter:
+    if dry_run:
         return None
+    if gemini_adapter is None:
+        logger.critical(
+            "gemini_adapter not found. LLM abstraction cannot proceed. "
+            "Ensure 'scripts' is in PYTHONPATH or gemini_adapter is properly installed."
+        )
+        raise ImportError("gemini_adapter is not available.")
 
     # Build prompt
     prompt = _build_llm_prompt(signals, user_samples, project_name, trading_focus)
 
     response_text = gemini_adapter.call_gemini(
         prompt,
-        model_name="gemini-3-flash-preview",
+        model_name=model_name,  # Use the model_name argument
         response_mime_type="application/json"
     )
 
@@ -492,7 +499,11 @@ def abstract_with_llm(
         response = gemini_adapter.extract_json_from_text(response_text)
         if response and "candidates" in response:
             return response["candidates"]
-
+        else:
+            logger.warning(
+                "Gemini abstraction returned invalid or empty JSON. Raw response:\n%s",
+                response_text,
+            )
     return None
 
 
@@ -516,7 +527,7 @@ def _build_llm_prompt(
             [
                 "This project is a trading and investing skill library. "
                 "Analyze the following session signals and user message samples to suggest "
-                "new Claude skill ideas focused on TRADING, INVESTING, and MARKET ANALYSIS.\n",
+                "new Gemini skill ideas focused on TRADING, INVESTING, and MARKET ANALYSIS.\n",
                 "\n## IMPORTANT CONSTRAINTS\n",
                 "- ONLY propose skills directly related to: stock/options trading, market analysis, "
                 "portfolio management, risk management, economic/earnings data, technical/fundamental "
@@ -529,7 +540,7 @@ def _build_llm_prompt(
     else:
         parts.append(
             "Analyze the following session signals and user message samples to suggest "
-            "new Claude skill ideas that would automate or improve the user's workflow.\n",
+            "new Gemini skill ideas that would automate or improve the user's workflow.\n",
         )
 
     parts.append("\n## Signals\n")
@@ -568,44 +579,7 @@ def _build_llm_prompt(
     return "\n".join(parts)
 
 
-def _extract_json_from_claude(output: str, required_keys: list[str]) -> dict | None:
-    """Extract JSON from claude CLI --output-format json envelope.
 
-    Unwraps the envelope (result or content[].text), then scans for
-    the first JSON object containing any of the required_keys.
-    """
-    # claude --output-format json wraps response; try to extract inner JSON
-    try:
-        wrapper = json.loads(output)
-        text = ""
-        if isinstance(wrapper, dict):
-            text = wrapper.get("result", "") or ""
-            if not text:
-                content = wrapper.get("content", [])
-                if isinstance(content, list):
-                    for block in content:
-                        if isinstance(block, dict) and block.get("type") == "text":
-                            text += block.get("text", "")
-        if not text:
-            text = output
-    except json.JSONDecodeError:
-        text = output
-
-    # Find JSON block using raw_decode
-    decoder = json.JSONDecoder()
-    idx = 0
-    while idx < len(text):
-        pos = text.find("{", idx)
-        if pos == -1:
-            break
-        try:
-            obj, end_idx = decoder.raw_decode(text, pos)
-            if isinstance(obj, dict) and any(k in obj for k in required_keys):
-                return obj
-            idx = pos + 1
-        except json.JSONDecodeError:
-            idx = pos + 1
-    return None
 
 
 def filter_non_trading_candidates(candidates: list[dict]) -> list[dict]:
@@ -659,7 +633,7 @@ def run(args: argparse.Namespace) -> int:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Determine base directory for project scanning
-    claude_dir = Path.home() / ".claude" / "projects"
+    gemini_dir = Path.home() / ".gemini" / "projects"
 
     # Determine allowlist
     if args.project:
@@ -668,9 +642,9 @@ def run(args: argparse.Namespace) -> int:
         allowlist = PROJECT_ALLOWLIST
 
     # Find project directories
-    project_dirs = find_project_dirs(claude_dir, allowlist)
+    project_dirs = find_project_dirs(gemini_dir, allowlist)
     if not project_dirs:
-        logger.warning("No matching project directories found in %s", claude_dir)
+        logger.warning("No matching project directories found in %s", gemini_dir)
         _write_empty_output(output_dir, args.lookback_days)
         return 0
 
@@ -789,7 +763,7 @@ def _aggregate_signals(all_signals: list[dict]) -> dict:
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Mine Claude Code session logs for skill idea candidates."
+        description="Mine Gemini Code session logs for skill idea candidates."
     )
     parser.add_argument(
         "--output-dir",

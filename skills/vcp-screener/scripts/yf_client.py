@@ -92,6 +92,7 @@ class YFClient:
 
     def _fetch_sp500_wikipedia(self) -> Optional[list[dict]]:
         if requests is None:
+            print("WARNING: requests library not found, Wikipedia fallback for S&P 500 constituents is unavailable.", file=sys.stderr)
             return None
         try:
             url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
@@ -137,6 +138,31 @@ class YFClient:
     # ── SET50 Constituents ────────────────────────────────────────────────────
 
     def get_thai_constituents(self, index: str = "SET50") -> Optional[list[dict]]:
+        try:
+            from scripts.lib.tv_client import get_thai_set50, get_thai_set100, is_available
+            if is_available():
+                if index == "SET100":
+                    stocks = get_thai_set100(limit=100)
+                else:
+                    stocks = get_thai_set50(limit=50)
+                
+                if stocks:
+                    constituents = [
+                        {
+                            "symbol": f"{s['name']}.BK",
+                            "name": s['name'],
+                            "sector": s.get("sector", index),
+                            "subSector": s.get("industry", "Thai Stock")
+                        }
+                        for s in stocks
+                    ]
+                    print(f"  (Thai {index} via TradingView: {len(constituents)} stocks)", flush=True)
+                    return constituents
+        except Exception as e:
+            import sys
+            print(f"WARNING: tv_client fetch failed ({e}). Falling back to hardcoded SET50.", file=sys.stderr)
+
+        # Fallback to hardcoded SET50
         set50_symbols = [
             "ADVANC", "AOT", "AWC", "BANPU", "BBL", "BCP", "BDMS", "BEM", "BGRIM",
             "BH", "BTS", "CBG", "CENTEL", "COM7", "CPALL", "CPF", "CPN", "CRC",
@@ -149,7 +175,7 @@ class YFClient:
             {"symbol": f"{sym}.BK", "name": sym, "sector": "SET50", "subSector": "Thai Stock"}
             for sym in set50_symbols
         ]
-        print(f"  (Thai {index}: {len(constituents)} stocks)", flush=True)
+        print(f"  (Thai {index} fallback: {len(constituents)} stocks)", flush=True)
         return constituents
 
     # ── Quote ─────────────────────────────────────────────────────────────────

@@ -186,6 +186,7 @@ def fetch_breadth_data(url: str = BREADTH_CSV_URL) -> list:
                 )
             )
         except (ValueError, KeyError):
+            print(f"WARNING: Skipping breadth data row due to unparseable value: {row}", file=sys.stderr)
             continue
     return results
 
@@ -209,6 +210,7 @@ def fetch_uptrend_data(url: str = UPTREND_CSV_URL, worksheet: str = "all") -> li
                 )
             )
         except (ValueError, KeyError):
+            print(f"WARNING: Skipping uptrend data row due to unparseable value: {row}", file=sys.stderr)
             continue
     return results
 
@@ -230,6 +232,7 @@ def fetch_sector_data(url: str = SECTOR_CSV_URL) -> list:
                 )
             )
         except (ValueError, KeyError):
+            print(f"WARNING: Skipping sector data row due to unparseable value: {row}", file=sys.stderr)
             continue
     return results
 
@@ -251,7 +254,6 @@ def analyze(
     breadth_rows: list,
     uptrend_rows: list,
     sector_rows: list,
-    days: int = 1,
 ) -> AnalysisResult:
     """Analyze the latest breadth data and return structured result."""
     # Latest breadth row(s)
@@ -432,12 +434,7 @@ def main():
         description="Fetch and analyze market breadth data from CSV sources"
     )
     parser.add_argument("--json", action="store_true", help="Output in JSON format")
-    parser.add_argument(
-        "--days",
-        type=int,
-        default=1,
-        help="Number of recent days to analyze (default: 1)",
-    )
+
     args = parser.parse_args()
 
     try:
@@ -445,7 +442,7 @@ def main():
         uptrend_rows = fetch_uptrend_data()
         sector_rows = fetch_sector_data()
 
-        result = analyze(breadth_rows, uptrend_rows, sector_rows, days=args.days)
+        result = analyze(breadth_rows, uptrend_rows, sector_rows)
 
         if args.json:
             print(format_json(result))

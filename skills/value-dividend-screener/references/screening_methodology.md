@@ -4,7 +4,7 @@
 
 This screening methodology identifies high-quality dividend stocks that combine:
 - **Value characteristics**: Reasonable valuations (low P/E, P/B)
-- **Income generation**: Attractive dividend yields (>=3.5%)
+- **Income generation**: Attractive dividend yields (>=3.0%)
 - **Growth profile**: Consistent dividend, revenue, and EPS growth
 - **Quality metrics**: Strong profitability, financial health, and dividend sustainability
 
@@ -12,7 +12,7 @@ This screening methodology identifies high-quality dividend stocks that combine:
 
 ### Phase 1: Initial Quantitative Filters
 
-#### 1. Dividend Yield >= 3.5%
+#### 1. Dividend Yield >= 3.0%
 **Rationale**: Provides meaningful income above typical market yields (S&P 500 average: ~1.5-2%)
 
 **Calculation**:
@@ -21,7 +21,7 @@ Dividend Yield = (Annual Dividends per Share / Current Stock Price) × 100
 ```
 
 **Threshold Logic**:
-- 3.5%+ provides attractive income
+- 3.0%+ provides attractive income
 - Not so high as to signal dividend risk (>8% often unsustainable)
 - Balances income and growth potential
 
@@ -182,6 +182,30 @@ Points = min((Margin% / 15%) × 50, 50)
 - 40-59: Average quality
 - < 40: Below average quality
 
+### Phase 4: Technical Analysis Filtering
+
+#### 10. Relative Strength Index (RSI) for Oversold Conditions
+**Rationale**: Identifies stocks that may be temporarily undervalued or have experienced a recent price pull-back, presenting a better entry point.
+
+**Calculation**:
+The RSI is a momentum oscillator that measures the speed and change of price movements. It oscillates between 0 and 100.
+```
+RSI = 100 - (100 / (1 + RS))
+where RS = Average Gain / Average Loss
+```
+
+**Threshold Logic**:
+- **RSI <= 40**: Considered oversold or nearing oversold. Stocks in this range have experienced recent downward pressure, potentially offering a discount. The screener prioritizes stocks with RSI <= 40.
+- **RSI > 40**: If no oversold stocks are found, the screener will still return stocks with the lowest RSI values, indicating relative weakness compared to others, which might still suggest a better entry.
+
+**Importance in Selection**:
+RSI acts as a final filter to select from the pool of fundamentally strong value dividend stocks. It helps in:
+- **Timing Entry**: Buying fundamentally sound stocks when they are temporarily out of favor.
+- **Risk Management**: Avoiding chasing stocks that are already overbought and due for a correction.
+- **Enhanced Value**: Combining strong fundamentals with favorable technical entry points.
+
+This ensures that not only are the stocks fundamentally sound, but they also offer a potentially opportune entry from a technical perspective.
+
 ## Composite Scoring System
 
 ### Purpose
@@ -285,11 +309,11 @@ Examples: Dividend Aristocrats, quality REITs (if included), stable utilities, c
 
 ## Historical Context
 
-### Why 3.5% Yield Threshold?
+### Why 3.0% Yield Threshold?
 
 - **US 10-Year Treasury**: Historically 2-4%
 - **S&P 500 Dividend Yield**: 1.5-2%
-- **Equity Risk Premium**: 3.5% provides ~1.5-2% premium over Treasuries
+- **Equity Risk Premium**: 3.0% provides ~1.5-2% premium over Treasuries
 - **Tax Efficiency**: Qualified dividends taxed favorably vs. bonds
 
 ### Why P/E <= 20?

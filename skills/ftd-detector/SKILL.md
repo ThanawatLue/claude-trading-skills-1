@@ -15,21 +15,12 @@ Detect Follow-Through Day (FTD) signals that confirm a market bottom, using Will
 
 ## When to Use This Skill
 
-**English:**
 - User asks "Is the market bottoming?" or "Is it safe to buy again?"
 - User observes a market correction (3%+ decline) and wants re-entry timing
 - User asks about Follow-Through Days or rally attempts
 - User wants to assess if a recent bounce is sustainable
 - User asks about increasing equity exposure after a correction
 - Market Top Detector shows elevated risk and user wants bottom signals
-
-**Japanese:**
-- 「底打ちした？」「買い戻して良い？」
-- 調整局面（3%以上の下落）からのエントリータイミング
-- フォロースルーデーやラリーアテンプトについて
-- 直近の反発が持続可能か評価したい
-- 調整後のエクスポージャー拡大の判断
-- Market Top Detectorが高リスク表示の後の底打ちシグナル確認
 
 ## Difference from Market Top Detector
 

@@ -29,15 +29,23 @@ Author: Claude Trading Skills
 Version: 1.0
 """
 
+from typing import List, Optional
+
 import numpy as np
 import requests
 from scipy.stats import norm
 
 
+class FMPAPIError(Exception):
+    """Custom exception for FMP API related errors."""
+
+    pass
+
+
 class OptionPricer:
     """Black-Scholes option pricer with Greeks calculation"""
 
-    def __init__(self, S, K, T, r, sigma, q=0):
+    def __init__(self, S: float, K: float, T: float, r: float, sigma: float, q: float = 0.0):
         """
         Initialize pricer with option parameters
 
@@ -56,12 +64,12 @@ class OptionPricer:
         q : float, optional
             Continuous dividend yield (annual, default 0)
         """
-        self.S = S
-        self.K = K
-        self.T = T
-        self.r = r
-        self.sigma = sigma
-        self.q = q
+        self.S: float = S
+        self.K: float = K
+        self.T: float = T
+        self.r: float = r
+        self.sigma: float = sigma
+        self.q: float = q
 
         # Validate inputs
         if S <= 0:
@@ -73,13 +81,15 @@ class OptionPricer:
         if sigma <= 0:
             raise ValueError("Volatility must be positive")
 
-    def _d1(self):
+    def _d1(self) -> float:
         """Calculate d1 parameter"""
-        numerator = np.log(self.S / self.K) + (self.r - self.q + 0.5 * self.sigma**2) * self.T
-        denominator = self.sigma * np.sqrt(self.T)
+        numerator: float = (
+            np.log(self.S / self.K) + (self.r - self.q + 0.5 * self.sigma**2) * self.T
+        )
+        denominator: float = self.sigma * np.sqrt(self.T)
         return numerator / denominator
 
-    def _d2(self):
+    def _d2(self) -> float:
         """Calculate d2 parameter"""
         return self._d1() - self.sigma * np.sqrt(self.T)
 
@@ -87,23 +97,23 @@ class OptionPricer:
     # Option Pricing
     # =========================================================================
 
-    def call_price(self):
+    def call_price(self) -> float:
         """Calculate European call option price"""
-        d1 = self._d1()
-        d2 = self._d2()
+        d1: float = self._d1()
+        d2: float = self._d2()
 
-        price = self.S * np.exp(-self.q * self.T) * norm.cdf(d1) - self.K * np.exp(
+        price: float = self.S * np.exp(-self.q * self.T) * norm.cdf(d1) - self.K * np.exp(
             -self.r * self.T
         ) * norm.cdf(d2)
 
         return max(0, price)  # Price cannot be negative
 
-    def put_price(self):
+    def put_price(self) -> float:
         """Calculate European put option price"""
-        d1 = self._d1()
-        d2 = self._d2()
+        d1: float = self._d1()
+        d2: float = self._d2()
 
-        price = self.K * np.exp(-self.r * self.T) * norm.cdf(-d2) - self.S * np.exp(
+        price: float = self.K * np.exp(-self.r * self.T) * norm.cdf(-d2) - self.S * np.exp(
             -self.q * self.T
         ) * norm.cdf(-d1)
 
@@ -113,97 +123,97 @@ class OptionPricer:
     # Greeks - First Order
     # =========================================================================
 
-    def call_delta(self):
+    def call_delta(self) -> float:
         """
         Calculate call delta
 
         Delta: Change in option price per $1 change in stock price
         Range: 0 to 1 for calls
         """
-        d1 = self._d1()
+        d1: float = self._d1()
         return np.exp(-self.q * self.T) * norm.cdf(d1)
 
-    def put_delta(self):
+    def put_delta(self) -> float:
         """
         Calculate put delta
 
         Delta: Change in option price per $1 change in stock price
         Range: -1 to 0 for puts
         """
-        d1 = self._d1()
+        d1: float = self._d1()
         return np.exp(-self.q * self.T) * (norm.cdf(d1) - 1)
 
-    def vega(self):
+    def vega(self) -> float:
         """
         Calculate vega (same for calls and puts)
 
         Vega: Change in option price per 1% change in volatility
         Always positive (options gain value when volatility increases)
         """
-        d1 = self._d1()
-        vega = self.S * np.exp(-self.q * self.T) * norm.pdf(d1) * np.sqrt(self.T)
+        d1: float = self._d1()
+        vega: float = self.S * np.exp(-self.q * self.T) * norm.pdf(d1) * np.sqrt(self.T)
         return vega / 100  # Per 1% change in volatility
 
-    def call_theta(self):
+    def call_theta(self) -> float:
         """
         Calculate call theta
 
         Theta: Change in option price per day (time decay)
         Usually negative (options lose value as time passes)
         """
-        d1 = self._d1()
-        d2 = self._d2()
+        d1: float = self._d1()
+        d2: float = self._d2()
 
-        term1 = (
+        term1: float = (
             -self.S * norm.pdf(d1) * self.sigma * np.exp(-self.q * self.T) / (2 * np.sqrt(self.T))
         )
-        term2 = -self.r * self.K * np.exp(-self.r * self.T) * norm.cdf(d2)
-        term3 = self.q * self.S * norm.cdf(d1) * np.exp(-self.q * self.T)
+        term2: float = -self.r * self.K * np.exp(-self.r * self.T) * norm.cdf(d2)
+        term3: float = self.q * self.S * norm.cdf(d1) * np.exp(-self.q * self.T)
 
-        theta_annual = term1 + term2 + term3
+        theta_annual: float = term1 + term2 + term3
         return theta_annual / 365  # Convert to per-day
 
-    def put_theta(self):
+    def put_theta(self) -> float:
         """Calculate put theta"""
-        d1 = self._d1()
-        d2 = self._d2()
+        d1: float = self._d1()
+        d2: float = self._d2()
 
-        term1 = (
+        term1: float = (
             -self.S * norm.pdf(d1) * self.sigma * np.exp(-self.q * self.T) / (2 * np.sqrt(self.T))
         )
-        term2 = self.r * self.K * np.exp(-self.r * self.T) * norm.cdf(-d2)
-        term3 = -self.q * self.S * norm.cdf(-d1) * np.exp(-self.q * self.T)
+        term2: float = self.r * self.K * np.exp(-self.r * self.T) * norm.cdf(-d2)
+        term3: float = -self.q * self.S * norm.cdf(-d1) * np.exp(-self.q * self.T)
 
-        theta_annual = term1 + term2 + term3
+        theta_annual: float = term1 + term2 + term3
         return theta_annual / 365
 
-    def call_rho(self):
+    def call_rho(self) -> float:
         """
         Calculate call rho
 
         Rho: Change in option price per 1% change in interest rate
         Positive for calls (calls gain value when rates increase)
         """
-        d2 = self._d2()
-        rho = self.K * self.T * np.exp(-self.r * self.T) * norm.cdf(d2)
+        d2: float = self._d2()
+        rho: float = self.K * self.T * np.exp(-self.r * self.T) * norm.cdf(d2)
         return rho / 100  # Per 1% change
 
-    def put_rho(self):
+    def put_rho(self) -> float:
         """
         Calculate put rho
 
         Rho: Change in option price per 1% change in interest rate
         Negative for puts (puts lose value when rates increase)
         """
-        d2 = self._d2()
-        rho = -self.K * self.T * np.exp(-self.r * self.T) * norm.cdf(-d2)
+        d2: float = self._d2()
+        rho: float = -self.K * self.T * np.exp(-self.r * self.T) * norm.cdf(-d2)
         return rho / 100
 
     # =========================================================================
     # Greeks - Second Order
     # =========================================================================
 
-    def gamma(self):
+    def gamma(self) -> float:
         """
         Calculate gamma (same for calls and puts)
 
@@ -211,38 +221,40 @@ class OptionPricer:
         Shows how fast delta changes
         Highest for ATM options, lower for OTM and ITM
         """
-        d1 = self._d1()
-        gamma = (np.exp(-self.q * self.T) * norm.pdf(d1)) / (self.S * self.sigma * np.sqrt(self.T))
+        d1: float = self._d1()
+        gamma: float = (np.exp(-self.q * self.T) * norm.pdf(d1)) / (
+            self.S * self.sigma * np.sqrt(self.T)
+        )
         return gamma
 
     # =========================================================================
     # Utility Methods
     # =========================================================================
 
-    def intrinsic_value(self, option_type="call"):
+    def intrinsic_value(self, option_type: str = "call") -> float:
         """Calculate intrinsic value"""
         if option_type.lower() == "call":
             return max(0, self.S - self.K)
         else:  # put
             return max(0, self.K - self.S)
 
-    def time_value(self, option_type="call"):
+    def time_value(self, option_type: str = "call") -> float:
         """Calculate time value (extrinsic value)"""
         if option_type.lower() == "call":
-            price = self.call_price()
+            price: float = self.call_price()
         else:
-            price = self.put_price()
+            price: float = self.put_price()
 
-        intrinsic = self.intrinsic_value(option_type)
+        intrinsic: float = self.intrinsic_value(option_type)
         return price - intrinsic
 
-    def moneyness(self):
+    def moneyness(self) -> str:
         """
         Determine moneyness
 
         Returns: 'ITM', 'ATM', or 'OTM'
         """
-        ratio = self.S / self.K
+        ratio: float = self.S / self.K
 
         if abs(ratio - 1.0) < 0.02:  # Within 2%
             return "ATM"
@@ -251,7 +263,7 @@ class OptionPricer:
         else:
             return "OTM (Call) / ITM (Put)"
 
-    def get_all_greeks(self, option_type="call"):
+    def get_all_greeks(self, option_type: str = "call") -> dict[str, float]:
         """
         Get all Greeks for an option
 
@@ -286,7 +298,7 @@ class OptionPricer:
 # =============================================================================
 
 
-def calculate_historical_volatility(prices, window=30):
+def calculate_historical_volatility(prices: List[float], window: int = 30) -> float:
     """
     Calculate historical volatility from price data
 
@@ -318,7 +330,7 @@ def calculate_historical_volatility(prices, window=30):
     return volatility
 
 
-def fetch_historical_prices_for_hv(symbol, api_key, days=90):
+def fetch_historical_prices_for_hv(symbol: str, api_key: str, days: int = 90) -> List[float]:
     """
     Fetch historical prices from FMP API for HV calculation
 
@@ -335,6 +347,11 @@ def fetch_historical_prices_for_hv(symbol, api_key, days=90):
     --------
     list
         List of adjusted close prices
+
+    Raises:
+    -------
+    FMPAPIError
+        If there's an error fetching prices from the FMP API.
     """
     # Try stable endpoint first, fall back to v3
     endpoints = [
@@ -351,14 +368,16 @@ def fetch_historical_prices_for_hv(symbol, api_key, days=90):
             else:
                 url = f"{base_url}/{symbol}"
                 resp = requests.get(url, headers={"apikey": api_key}, timeout=30)
-            if resp.status_code != 200:
-                continue
+
+            resp.raise_for_status()  # Raise HTTPError for bad responses (4xx or 5xx)
             data = resp.json()
-            historical = None
+            historical: Optional[List[dict]] = None
             if isinstance(data, dict) and "historical" in data:
                 historical = data["historical"]
             elif isinstance(data, dict) and "historicalStockList" in data:
                 for entry in data["historicalStockList"]:
+                    # FMP sometimes uses hyphens for certain symbols (e.g., BRK.B might be BRK-B in some FMP contexts).
+                    # This ensures consistent matching by converting both to dot format.
                     if entry.get("symbol", "").replace("-", ".") == symbol.replace("-", "."):
                         historical = entry.get("historical", [])
                         break
@@ -366,11 +385,15 @@ def fetch_historical_prices_for_hv(symbol, api_key, days=90):
                 historical = historical[:days]
                 historical = historical[::-1]  # Reverse to chronological order
                 return [item["adjClose"] for item in historical]
-        except Exception:  # nosec B112 - intentional fallback to next FMP endpoint
+        except requests.exceptions.RequestException as e:
+            # Log the specific request error but continue to try other endpoints
+            print(f"Request error for {symbol} with {base_url}: {e}")
+            continue
+        except Exception as e:  # nosec B112 - intentional fallback to next FMP endpoint
+            print(f"Error processing FMP response for {symbol} with {base_url}: {e}")
             continue
 
-    print(f"Error fetching prices for {symbol}: all endpoints failed")
-    return None
+    raise FMPAPIError(f"Error fetching historical prices for {symbol}: all endpoints failed")
 
 
 # =============================================================================
@@ -378,7 +401,7 @@ def fetch_historical_prices_for_hv(symbol, api_key, days=90):
 # =============================================================================
 
 
-def get_current_stock_price(symbol, api_key):
+def get_current_stock_price(symbol: str, api_key: str) -> float:
     """Fetch current stock price from FMP API"""
     url = f"https://financialmodelingprep.com/api/v3/quote/{symbol}"
 
@@ -387,16 +410,19 @@ def get_current_stock_price(symbol, api_key):
         response.raise_for_status()
         data = response.json()
 
-        if data and len(data) > 0:
-            return data[0]["price"]
-        return None
+        if data and len(data) > 0 and "price" in data[0]:
+            return float(data[0]["price"])
+        raise FMPAPIError(f"Could not retrieve current price for {symbol}. Response data: {data}")
 
+    except requests.exceptions.RequestException as e:
+        raise FMPAPIError(f"Error fetching current price for {symbol}: {e}") from e
     except Exception as e:
-        print(f"Error fetching current price for {symbol}: {e}")
-        return None
+        raise FMPAPIError(
+            f"An unexpected error occurred while fetching current price for {symbol}: {e}"
+        ) from e
 
 
-def get_dividend_yield(symbol, api_key):
+def get_dividend_yield(symbol: str, api_key: str) -> float:
     """Fetch dividend yield from FMP API"""
     url = f"https://financialmodelingprep.com/api/v3/profile/{symbol}"
 
@@ -407,15 +433,19 @@ def get_dividend_yield(symbol, api_key):
 
         if data and len(data) > 0:
             # Last annual dividend / current price
-            last_div = data[0].get("lastDiv", 0)
-            price = data[0].get("price", 1)
-            div_yield = (last_div / price) if price > 0 else 0
+            last_div = data[0].get("lastDiv", 0.0)
+            price = data[0].get("price", 1.0)
+            div_yield = (last_div / price) if price > 0 else 0.0
             return div_yield
 
-        return 0
+        raise FMPAPIError(f"Could not retrieve dividend yield for {symbol}. Response data: {data}")
 
-    except Exception:
-        return 0
+    except requests.exceptions.RequestException as e:
+        raise FMPAPIError(f"Error fetching dividend yield for {symbol}: {e}") from e
+    except Exception as e:
+        raise FMPAPIError(
+            f"An unexpected error occurred while fetching dividend yield for {symbol}: {e}"
+        ) from e
 
 
 # =============================================================================

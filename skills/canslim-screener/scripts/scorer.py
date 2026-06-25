@@ -108,58 +108,105 @@ def calculate_composite_score(
     }
 
 
-def interpret_composite_score(composite: float) -> dict:
+def interpret_composite_score(composite: float, market: str = "US") -> dict:
     """
     Interpret composite score and provide rating/guidance
 
     Args:
         composite: Composite score (0-100)
+        market: Target market ("US" or "TH")
 
     Returns:
         Dict with rating, description, guidance
     """
-    if composite >= 90:
-        return {
-            "rating": "Exceptional+",
-            "description": "Rare multi-bagger setup - all components near-perfect",
-            "guidance": "Immediate buy, aggressive position sizing (15-20% of portfolio)",
-        }
-    elif composite >= 80:
-        return {
-            "rating": "Exceptional",
-            "description": "Outstanding fundamentals + strong momentum",
-            "guidance": "Strong buy, standard sizing (10-15% of portfolio)",
-        }
-    elif composite >= 70:
-        return {
-            "rating": "Strong",
-            "description": "Solid across all components, minor weaknesses",
-            "guidance": "Buy, standard sizing (8-12% of portfolio)",
-        }
-    elif composite >= 60:
-        return {
-            "rating": "Above Average",
-            "description": "Meets thresholds, one component weak",
-            "guidance": "Buy on pullback, conservative sizing (5-8% of portfolio)",
-        }
-    elif composite >= 50:
-        return {
-            "rating": "Average",
-            "description": "Marginal CANSLIM candidate",
-            "guidance": "Watchlist only, consider 3-5% if high conviction",
-        }
-    elif composite >= 40:
-        return {
-            "rating": "Below Average",
-            "description": "Fails one or more key thresholds",
-            "guidance": "Monitor, do not buy",
-        }
+    if market == "TH":
+        # Relaxed bands for Thai market (by 5 points)
+        if composite >= 85:
+            return {
+                "rating": "Exceptional+",
+                "description": "Rare multi-bagger setup - all components near-perfect (Thai Adjusted)",
+                "guidance": "Immediate buy, aggressive position sizing (15-20% of portfolio)",
+            }
+        elif composite >= 75:
+            return {
+                "rating": "Exceptional",
+                "description": "Outstanding fundamentals + strong momentum (Thai Adjusted)",
+                "guidance": "Strong buy, standard sizing (10-15% of portfolio)",
+            }
+        elif composite >= 65:
+            return {
+                "rating": "Strong",
+                "description": "Solid across all components, minor weaknesses (Thai Adjusted)",
+                "guidance": "Buy, standard sizing (8-12% of portfolio)",
+            }
+        elif composite >= 55:
+            return {
+                "rating": "Above Average",
+                "description": "Meets thresholds, one component weak (Thai Adjusted)",
+                "guidance": "Buy on pullback, conservative sizing (5-8% of portfolio)",
+            }
+        elif composite >= 45:
+            return {
+                "rating": "Average",
+                "description": "Marginal CANSLIM candidate (Thai Adjusted)",
+                "guidance": "Watchlist only, consider 3-5% if high conviction",
+            }
+        elif composite >= 35:
+            return {
+                "rating": "Below Average",
+                "description": "Fails one or more key thresholds (Thai Adjusted)",
+                "guidance": "Monitor, do not buy",
+            }
+        else:
+            return {
+                "rating": "Weak",
+                "description": "Does not meet CANSLIM criteria",
+                "guidance": "Avoid",
+            }
     else:
-        return {
-            "rating": "Weak",
-            "description": "Does not meet CANSLIM criteria",
-            "guidance": "Avoid",
-        }
+        # Standard US bands
+        if composite >= 90:
+            return {
+                "rating": "Exceptional+",
+                "description": "Rare multi-bagger setup - all components near-perfect",
+                "guidance": "Immediate buy, aggressive position sizing (15-20% of portfolio)",
+            }
+        elif composite >= 80:
+            return {
+                "rating": "Exceptional",
+                "description": "Outstanding fundamentals + strong momentum",
+                "guidance": "Strong buy, standard sizing (10-15% of portfolio)",
+            }
+        elif composite >= 70:
+            return {
+                "rating": "Strong",
+                "description": "Solid across all components, minor weaknesses",
+                "guidance": "Buy, standard sizing (8-12% of portfolio)",
+            }
+        elif composite >= 60:
+            return {
+                "rating": "Above Average",
+                "description": "Meets thresholds, one component weak",
+                "guidance": "Buy on pullback, conservative sizing (5-8% of portfolio)",
+            }
+        elif composite >= 50:
+            return {
+                "rating": "Average",
+                "description": "Marginal CANSLIM candidate",
+                "guidance": "Watchlist only, consider 3-5% if high conviction",
+            }
+        elif composite >= 40:
+            return {
+                "rating": "Below Average",
+                "description": "Fails one or more key thresholds",
+                "guidance": "Monitor, do not buy",
+            }
+        else:
+            return {
+                "rating": "Weak",
+                "description": "Does not meet CANSLIM criteria",
+                "guidance": "Avoid",
+            }
 
 
 def check_minimum_thresholds(
@@ -361,6 +408,7 @@ def calculate_composite_score_phase3(
     l_score: float,
     i_score: float,
     m_score: float,
+    market: str = "US",
 ) -> dict:
     """
     Calculate weighted composite CANSLIM score for Phase 3 (FULL 7 components)
@@ -375,6 +423,7 @@ def calculate_composite_score_phase3(
         l_score: Leadership/RS Rank component score (0-100)
         i_score: Institutional component score (0-100)
         m_score: Market Direction component score (0-100)
+        market: Target market ("US" or "TH")
 
     Returns:
         Dict with:
@@ -418,7 +467,7 @@ def calculate_composite_score_phase3(
     weakest_score = components[weakest_component]
 
     # Get rating and interpretation
-    rating_info = interpret_composite_score(composite)
+    rating_info = interpret_composite_score(composite, market=market)
 
     return {
         "composite_score": round(composite, 1),
@@ -447,29 +496,29 @@ def check_minimum_thresholds_phase3(
     l_score: float,
     i_score: float,
     m_score: float,
+    market: str = "US",
 ) -> dict:
     """
     Check if stock meets minimum CANSLIM thresholds (Phase 3: FULL 7 components)
 
     Minimum thresholds for "buy" consideration:
-    - C >= 60 (18%+ quarterly EPS growth)
-    - A >= 50 (25%+ annual EPS CAGR)
+    - C >= 60 (18%+ quarterly EPS growth; 50 for Thai)
+    - A >= 50 (25%+ annual EPS CAGR; 40 for Thai)
     - N >= 40 (within 25% of 52-week high)
     - S >= 40 (accumulation pattern, ratio >= 1.0)
-    - L >= 50 (RS Rank 60+, outperforming market)
-    - I >= 40 (30+ holders or 20%+ ownership)
+    - L >= 50 (RS Rank 60+, outperforming market; 40 for Thai)
+    - I >= 40 (30+ holders or 20%+ ownership; 30 for Thai)
     - M >= 40 (market not in downtrend)
 
     Args:
         c_score, a_score, n_score, s_score, l_score, i_score, m_score: Component scores
-
-    Returns:
-        Dict with:
-            - passes_all: Boolean - True if all thresholds met
-            - failed_components: List of components below threshold
-            - recommendation: "buy", "watchlist", or "avoid"
+        market: Target market ("US" or "TH")
     """
-    thresholds = {"C": 60, "A": 50, "N": 40, "S": 40, "L": 50, "I": 40, "M": 40}
+    if market == "TH":
+        thresholds = {"C": 50, "A": 40, "N": 40, "S": 40, "L": 40, "I": 30, "M": 40}
+    else:
+        thresholds = {"C": 60, "A": 50, "N": 40, "S": 40, "L": 50, "I": 40, "M": 40}
+
     scores = {
         "C": c_score,
         "A": a_score,
@@ -491,8 +540,9 @@ def check_minimum_thresholds_phase3(
             "reason": "Bear market - M component = 0. Do NOT buy regardless of other scores.",
         }
 
-    # Special case: L score < 40 (major laggard) - strong warning
-    if l_score < 40:
+    # Special case: L score < min_l_threshold (major laggard) - strong warning
+    min_l_threshold = 30 if market == "TH" else 40
+    if l_score < min_l_threshold:
         if "L" not in failed:
             failed.append("L")
         return {

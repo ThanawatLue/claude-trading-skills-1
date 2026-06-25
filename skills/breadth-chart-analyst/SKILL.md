@@ -28,6 +28,7 @@ Do NOT use this skill when:
 ## Prerequisites
 
 - **Chart Images Optional**: CSV data from public sources is the PRIMARY data source; chart images provide supplementary visual context
+- **Pillow (PIL)**: Required for image processing (e.g., `extract_chart_right_edge.py`). Install with `pip install Pillow`.
 - **No API Keys Required**: CSV data is fetched from public GitHub Pages; no external API subscriptions needed
 - **Language**: All analysis and output conducted in English
 
@@ -93,7 +94,7 @@ Reports include executive summaries, current readings, signal identification, sc
 **CRITICAL**: CSV data is the PRIMARY source for all Breadth values. This step MUST be executed BEFORE any image analysis.
 
 ```bash
-python3 skills/breadth-chart-analyst/scripts/fetch_breadth_csv.py
+python scripts/fetch_breadth_csv.py
 ```
 
 **Why CSV is PRIMARY**:
@@ -114,7 +115,7 @@ python3 skills/breadth-chart-analyst/scripts/fetch_breadth_csv.py
 |----------|--------|---------|-------------|
 | 1 (PRIMARY) | **CSV Data** | All numerical values, dead cross status, color | HIGH |
 | 2 (SUPPLEMENTARY) | **Chart Image** | Visual trend context, pattern confirmation | MEDIUM |
-| 3 (DEPRECATED) | ~~OpenCV detect_breadth_values.py~~ | ~~Breadth detection~~ | **UNRELIABLE** |
+| 3 (DEPRECATED) | ~~OpenCV scripts/detect_breadth_values.py~~ | ~~Breadth detection~~ | **UNRELIABLE** |
 | 4 (LAST RESORT) | ~~LLM visual reading~~ | ~~Emergency only~~ | LOW |
 
 **Expected Output**:
@@ -179,7 +180,7 @@ Then, extract and analyze the **rightmost 25%** of the chart to accurately deter
 **Execute the Python script to extract the right edge:**
 
 ```bash
-python3 skills/breadth-chart-analyst/scripts/extract_chart_right_edge.py <image_path> --percent 25
+python scripts/extract_chart_right_edge.py <image_path> --percent 25
 ```
 
 #### Why Two-Stage Analysis is Mandatory
@@ -222,8 +223,8 @@ This reference contains detailed guidance on:
 To understand the chart format and visual elements, review the sample charts included in this skill:
 
 ```
-View: skills/breadth-chart-analyst/assets/SP500_Breadth_Index_200MA_8MA.jpeg
-View: skills/breadth-chart-analyst/assets/US_Stock_Market_Uptrend_Ratio.jpeg
+View: assets/SP500_Breadth_Index_200MA_8MA.jpeg
+View: assets/US_Stock_Market_Uptrend_Ratio.jpeg
 ```
 
 These samples demonstrate:
@@ -391,7 +392,7 @@ If Chart 2 is provided, conduct systematic analysis:
 **NOTE (Issue #7)**: This OpenCV detection step is **DEPRECATED**. Use CSV data from Step 0 as the PRIMARY source. The OpenCV script may be run for supplementary validation only, but CSV values take precedence in all cases.
 
 ```bash
-python3 skills/breadth-chart-analyst/scripts/detect_uptrend_ratio.py <image_path> [--debug]
+python scripts/detect_uptrend_ratio.py <image_path> [--debug]
 ```
 
 #### 5.1 Extract Current Readings
@@ -495,7 +496,7 @@ Address any conflicts between charts and explain resolution.
 Create a comprehensive markdown report using the template structure:
 
 ```
-Read and use as template: skills/breadth-chart-analyst/assets/breadth_analysis_template.md
+Read and use as template: assets/breadth_analysis_template.md
 ```
 
 **IMPORTANT**: All analysis and output must be in English.
@@ -717,8 +718,8 @@ Sample Chart 2 image for format reference.
 **PRIMARY data source**. Fetches market breadth, uptrend ratio, and sector summary data from public CSV sources. Uses only stdlib (urllib + csv) -- no external dependencies.
 
 ```bash
-python3 skills/breadth-chart-analyst/scripts/fetch_breadth_csv.py        # Human-readable
-python3 skills/breadth-chart-analyst/scripts/fetch_breadth_csv.py --json  # JSON output
+python scripts/fetch_breadth_csv.py        # Human-readable
+python scripts/fetch_breadth_csv.py --json  # JSON output
 ```
 
 ### scripts/extract_chart_right_edge.py
@@ -726,7 +727,7 @@ python3 skills/breadth-chart-analyst/scripts/fetch_breadth_csv.py --json  # JSON
 Extracts the rightmost portion of chart images to help focus on latest data points. Requires PIL/Pillow.
 
 ```bash
-python3 skills/breadth-chart-analyst/scripts/extract_chart_right_edge.py <image_path> --percent 25
+python scripts/extract_chart_right_edge.py <image_path> --percent 25
 ```
 
 ### scripts/detect_uptrend_ratio.py (DEPRECATED)

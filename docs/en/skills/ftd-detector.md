@@ -3,7 +3,7 @@ layout: default
 title: "FTD Detector"
 grand_parent: English
 parent: Skill Guides
-nav_order: 24
+nav_order: 31
 lang_peer: /ja/skills/ftd-detector/
 permalink: /en/skills/ftd-detector/
 ---
@@ -30,7 +30,7 @@ Detects Follow-Through Day (FTD) signals for market bottom confirmation using Wi
 
 ## 1. Overview
 
-FTD Detector identifies market bottom signals using William O'Neil's Follow-Through Day methodology. It tracks S&P 500 and NASDAQ/QQQ simultaneously through a state machine that progresses from correction to rally attempt to FTD confirmation, with post-FTD health monitoring including distribution day counting, invalidation detection, and power trend analysis.
+# FTD Detector Skill
 
 ---
 
@@ -109,6 +109,8 @@ Based on the market state, provide additional guidance:
 
 ---
 
+---
+
 ## 6. Resources
 
 **References:**
@@ -123,3 +125,4 @@ Based on the market state, provide additional guidance:
 - `skills/ftd-detector/scripts/post_ftd_monitor.py`
 - `skills/ftd-detector/scripts/rally_tracker.py`
 - `skills/ftd-detector/scripts/report_generator.py`
+- `skills/ftd-detector/scripts/yf_client.py`

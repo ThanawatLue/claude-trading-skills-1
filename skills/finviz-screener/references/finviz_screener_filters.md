@@ -1,7 +1,7 @@
 # FinViz Screener Filter Reference
 
 
-This reference maps FinViz screener filter codes to their meanings and natural-language keywords (English + Japanese). Claude uses this document to translate user intent into valid FinViz filter codes.
+This reference maps FinViz screener filter codes to their meanings and natural-language keywords (English). Claude uses this document to translate user intent into valid FinViz filter codes.
 
 
 ---

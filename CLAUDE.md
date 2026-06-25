@@ -59,7 +59,7 @@ Each skill follows a standardized directory structure:
 |-----------|---------|
 | `agents/` | Agent definitions (multi-step orchestrators using Claude Agent SDK) |
 | `commands/` | Slash-command definitions for Claude Code sessions |
-| `dashboard/` | Flask + Lightweight Charts dashboard. Features: light/dark theme toggle (☾/☼ in header, localStorage persistence, theme-aware charts via `getChartTheme()`), Paper Portfolio card (open/closed positions with click-to-expand chart, live risk calculator modal, 7-emotion pills, MAE/MFE tracking, drawdown ⚠️/🚨 alerts), 📝 buttons next to ★ in VCP/CANSLIM/Thai Swing/Thai Dividend for one-click paper-trade entry. Watchlist `criteria` field exported and shown as tooltip per bucket. `/api/data` does deep-merge of DB snapshot + fresh JSON files so newly-added schema fields appear without re-running analysis. |
+| `dashboard/` | Flask + Lightweight Charts dashboard for visualizing skill outputs |
 | `workflows/` | Canonical YAML manifests for multi-skill operational procedures |
 | `skill-packages/` | Pre-built `.skill` ZIP archives for Claude web app upload |
 | `launchd/` | macOS launch daemon plists for automated daily/weekly pipeline runs |
@@ -288,7 +288,7 @@ The table below is **auto-generated** from `skills-index.yaml` by `scripts/gener
 | **Options Strategy Advisor** | 🟡 Optional | ❌ Not used | ❌ Not used | Financial Modeling Prep API |
 | **PEAD Screener** | ✅ Required | ❌ Not used | ❌ Not used | Financial Modeling Prep API |
 | **Pair Trade Screener** | ✅ Required | ❌ Not used | ❌ Not used | Financial Modeling Prep API |
-| **Paper Trade Simulator** | ❌ Not used | ❌ Not used | ❌ Not used | yfinance for mark-to-market price updates (free); Shares state/market_cache.db with dashboard (paper_trade table) |
+| **Paper Trade Simulator** | ❌ Not used | ❌ Not used | ❌ Not used | Local SQLite state database; no API key required; Paper trading and discipline metrics; works offline |
 | **Parabolic Short Trade Planner** | ✅ Required | ❌ Not used | 🟡 Optional | Financial Modeling Prep API |
 | **Portfolio Manager** | ❌ Not used | ❌ Not used | ✅ Required | Alpaca brokerage MCP/API |
 | **Position Sizer** | ❌ Not used | ❌ Not used | ❌ Not used | Pure calculation; works offline |
@@ -301,17 +301,17 @@ The table below is **auto-generated** from `skills-index.yaml` by `scripts/gener
 | **Stanley Druckenmiller Investment** | ❌ Not used | ❌ Not used | ❌ Not used | Synthesizes outputs from upstream skills; pure calculation |
 | **Strategy Pivot Designer** | ❌ Not used | ❌ Not used | ❌ Not used | Pivot proposal generator; pure calculation |
 | **Technical Analyst** | ❌ Not used | ❌ Not used | ❌ Not used | Chart screenshot input |
-| **Thai Breadth Analyzer** | ❌ Not used | ❌ Not used | ❌ Not used | TV Screener for breadth snapshot |
-| **Thai Dividend Screener** | ❌ Not used | ❌ Not used | ❌ Not used | TV Screener gives yield + P/E + SETHD membership |
-| **Thai Sector Heatmap** | ❌ Not used | ❌ Not used | ❌ Not used | TV Screener bulk fetch (free, no key) |
-| **Thai Watchlist Builder** | ❌ Not used | ❌ Not used | ❌ Not used | TV Screener with multi-criteria filters |
+| **Thai Breadth Analyzer** | ❌ Not used | ❌ Not used | ❌ Not used | TradingView public scanner; no API key required |
+| **Thai Dividend Screener** | ❌ Not used | ❌ Not used | ❌ Not used | TradingView public scanner; no API key required |
+| **Thai Sector Heatmap** | ❌ Not used | ❌ Not used | ❌ Not used | TradingView public scanner; no API key required |
+| **Thai Watchlist Builder** | ❌ Not used | ❌ Not used | ❌ Not used | TradingView public scanner; no API key required |
 | **Theme Detector** | 🟡 Optional | 🟡 Optional (Recommended) | ❌ Not used | Financial Modeling Prep API |
 | **Trade Hypothesis Ideator** | ❌ Not used | ❌ Not used | ❌ Not used | Hypothesis generation from journal/data inputs; pure calculation |
 | **Trader Memory Core** | 🟡 Optional | ❌ Not used | ❌ Not used | Financial Modeling Prep API |
 | **US Market Bubble Detector** | ❌ Not used | ❌ Not used | ❌ Not used | User provides indicators |
 | **US Stock Analysis** | ❌ Not used | ❌ Not used | ❌ Not used | User provides data |
 | **Uptrend Analyzer** | ❌ Not used | ❌ Not used | ❌ Not used | Monty Uptrend Ratio Dashboard CSV; no API key required |
-| **VCP Screener** | ✅ Required | ❌ Not used | ❌ Not used | S&P 500 OHLCV via FMP (US market) |
+| **VCP Screener** | ✅ Required | ❌ Not used | ❌ Not used | S&P 500 OHLCV via FMP |
 | **Value Dividend Screener** | ✅ Required | 🟡 Optional (Recommended) | ❌ Not used | Financial Modeling Prep API |
 <!-- skills-index:end name="api-matrix" -->
 
@@ -800,25 +800,7 @@ These skills fetch future events via FMP API:
 
 The blocks below are informal sketches kept for skills not yet covered by a YAML manifest. They are quickstart help, not contracts. When in doubt, defer to the YAML manifests above.
 
-**🇹🇭 Thai Market Daily Workflow (TV-only, no API key):**
-1. Thai Breadth Analyzer → SET regime classification (% above SMA50/200, A/D)
-2. Thai Sector Heatmap → top sectors by 1M/3M momentum
-3. Thai Watchlist Builder → 4 auto-curated buckets (Growth/Value/Momentum/Mean-Reversion)
-4. VCP Screener `--market TH` → Thai Swing setups (TV pre-filter + yfinance ATR hybrid)
-5. Thai Dividend Screener → SETHD income picks (weekly cadence)
-
-**🆕 Paper Trade Loop (test discipline before real money):**
-1. Pick from any screener (Thai Swing / Dividend / VCP / CANSLIM) → click 📝 next to ★ → styled modal with live risk calculator
-2. Adjust shares (sees Total risk %, R:R, position size update live) → tag emotion (7 options with emoji) → click ✅ Open Position → toast confirms
-3. Click 💲 ดึงราคาใหม่ (Live) → yfinance refreshes prices → auto-closes if stop/target hit
-4. Click any row to expand → see embedded 1Y chart with Entry/Stop/Target/MAE/MFE overlay + journal log
-5. Click ✎ Note during a hold → journal emotional moments (without closing)
-6. Track **two discipline metrics**:
-   - `stop_respect_rate` > 80% (don't panic-close losers before stop)
-   - `patience_score` > 70% (don't cut winners > 0.5R early — based on MFE)
-7. Dashboard "Paper Portfolio" card shows: 10-tile stats + open table + closed table + drawdown alerts (⚠️/🚨)
-
-**Daily Market Monitoring (US):**
+**Daily Market Monitoring:**
 1. Economic Calendar Fetcher → Check today's events
 2. Earnings Calendar → Identify reporting companies
 3. Market News Analyst → Review overnight developments
