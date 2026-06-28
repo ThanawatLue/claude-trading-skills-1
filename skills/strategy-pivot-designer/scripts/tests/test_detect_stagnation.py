@@ -1,6 +1,7 @@
 """Unit tests for detect_stagnation.py."""
 
 import json
+import os
 from pathlib import Path
 
 import detect_stagnation as ds
@@ -417,33 +418,43 @@ class TestDetermineRecommendation:
         triggers = []
         score_trajectory = [50, 40, 28, 25, 22]
         iteration_count = len(score_trajectory)
-        assert ds._determine_recommendation(triggers, score_trajectory, iteration_count) == "abandon"
+        assert (
+            ds._determine_recommendation(triggers, score_trajectory, iteration_count) == "abandon"
+        )
 
     def test_abandon_condition_not_met_score_too_high(self):
         # latest score >= 30
         triggers = []
         score_trajectory = [50, 40, 32, 31, 30]
         iteration_count = len(score_trajectory)
-        assert ds._determine_recommendation(triggers, score_trajectory, iteration_count) == "continue"
+        assert (
+            ds._determine_recommendation(triggers, score_trajectory, iteration_count) == "continue"
+        )
 
     def test_abandon_condition_not_met_not_enough_iterations(self):
         # iteration_count < 3
         triggers = []
         score_trajectory = [28, 25]
         iteration_count = len(score_trajectory)
-        assert ds._determine_recommendation(triggers, score_trajectory, iteration_count) == "continue"
+        assert (
+            ds._determine_recommendation(triggers, score_trajectory, iteration_count) == "continue"
+        )
 
     def test_abandon_condition_not_met_not_monotonic(self):
         # last-3 not monotonically non-increasing
         triggers = []
-        score_trajectory = [50, 20, 25, 18] # last 3: 20, 25, 18 (not monotonic)
+        score_trajectory = [50, 20, 25, 18]  # last 3: 20, 25, 18 (not monotonic)
         iteration_count = len(score_trajectory)
-        assert ds._determine_recommendation(triggers, score_trajectory, iteration_count) == "continue"
-        
-        score_trajectory_2 = [50, 40, 28, 29, 22] # last 3: 28, 29, 22 (not monotonic)
-        iteration_count_2 = len(score_trajectory_2)
-        assert ds._determine_recommendation(triggers, score_trajectory_2, iteration_count_2) == "continue"
+        assert (
+            ds._determine_recommendation(triggers, score_trajectory, iteration_count) == "continue"
+        )
 
+        score_trajectory_2 = [50, 40, 28, 29, 22]  # last 3: 28, 29, 22 (not monotonic)
+        iteration_count_2 = len(score_trajectory_2)
+        assert (
+            ds._determine_recommendation(triggers, score_trajectory_2, iteration_count_2)
+            == "continue"
+        )
 
     def test_pivot_condition_met(self):
         # at least one trigger fired, and abandon condition is not met
@@ -457,7 +468,9 @@ class TestDetermineRecommendation:
         triggers = []
         score_trajectory = [50, 60, 70]
         iteration_count = len(score_trajectory)
-        assert ds._determine_recommendation(triggers, score_trajectory, iteration_count) == "continue"
+        assert (
+            ds._determine_recommendation(triggers, score_trajectory, iteration_count) == "continue"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -486,7 +499,7 @@ class TestCliIntegration:
         try:
             return ds.main()
         finally:
-            self.monkeypatch.undo() # Clean up the monkeypatch
+            self.monkeypatch.undo()  # Clean up the monkeypatch
 
     def test_main_missing_history_file_returns_error(self):
         # Don't create history_path
@@ -523,7 +536,7 @@ class TestCliIntegration:
         assert exit_code == 0
         diagnosis_files = list(self.output_dir.glob("pivot_diagnosis_*.json"))
         assert len(diagnosis_files) == 1
-        with open(diagnosis_files[0], "r") as f:
+        with open(diagnosis_files[0]) as f:
             diagnosis = json.load(f)
         assert diagnosis["stagnation_detected"] is True
         assert diagnosis["recommendation"] == "pivot"
@@ -546,8 +559,7 @@ class TestCliIntegration:
         assert exit_code == 0
         diagnosis_files = list(self.output_dir.glob("pivot_diagnosis_*.json"))
         assert len(diagnosis_files) == 1
-        with open(diagnosis_files[0], "r") as f:
+        with open(diagnosis_files[0]) as f:
             diagnosis = json.load(f)
         assert diagnosis["stagnation_detected"] is True
         assert diagnosis["recommendation"] == "abandon"
-

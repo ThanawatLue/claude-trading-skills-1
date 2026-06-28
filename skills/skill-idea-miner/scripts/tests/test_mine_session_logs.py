@@ -321,49 +321,6 @@ def test_detect_unresolved_requests_user_then_user(mine_module):
     assert result["count"] == 1
 
 
-# ── _extract_json_from_claude ──
-
-
-def test_extract_json_from_claude_candidates(mine_module):
-    """JSON with candidates key is extracted."""
-    raw = json.dumps(
-        {
-            "candidates": [
-                {
-                    "name": "test-skill",
-                    "description": "A test",
-                    "rationale": "Because",
-                    "priority": "high",
-                },
-            ],
-        }
-    )
-    result = mine_module._extract_json_from_claude(raw, ["candidates"])
-    assert result is not None
-    assert "candidates" in result
-    assert len(result["candidates"]) == 1
-
-
-def test_extract_json_from_claude_wrapped(mine_module):
-    """JSON wrapped in claude --output-format json envelope."""
-    inner = json.dumps(
-        {
-            "candidates": [{"name": "x", "description": "y", "rationale": "z", "priority": "low"}],
-        }
-    )
-    wrapper = json.dumps({"result": f"Here are the ideas:\n{inner}\nDone."})
-    result = mine_module._extract_json_from_claude(wrapper, ["candidates"])
-    assert result is not None
-    assert result["candidates"][0]["name"] == "x"
-
-
-def test_extract_json_from_claude_no_candidates(mine_module):
-    """JSON without 'candidates' key returns None."""
-    raw = '{"score": 85, "summary": "review"}'
-    result = mine_module._extract_json_from_claude(raw, ["candidates"])
-    assert result is None
-
-
 # ── Real session format: entry.type != msg.type ──
 
 
@@ -769,9 +726,9 @@ def test_aggregate_signals(mine_module):
 
 # ── LLM failure modes ──
 
+
 def test_abstract_with_llm_raises_error_if_no_gemini_adapter_and_not_dry_run(mine_module):
     """abstract_with_llm raises ImportError if gemini_adapter is None and not dry_run."""
-    import gemini_adapter # This import should be mocked to be None
 
     # Temporarily set gemini_adapter to None
     original_gemini_adapter = mine_module.gemini_adapter
@@ -786,11 +743,11 @@ def test_abstract_with_llm_raises_error_if_no_gemini_adapter_and_not_dry_run(min
 
 def test_abstract_with_llm_logs_warning_on_invalid_json(mine_module, caplog):
     """abstract_with_llm logs a warning if LLM returns invalid JSON."""
-    from unittest.mock import MagicMock, patch
+    from unittest.mock import MagicMock
 
     mock_gemini_adapter = MagicMock()
     mock_gemini_adapter.call_gemini.return_value = "this is not json"
-    mock_gemini_adapter.extract_json_from_text.return_value = None # Simulate JSON parsing failure
+    mock_gemini_adapter.extract_json_from_text.return_value = None  # Simulate JSON parsing failure
 
     # Temporarily set gemini_adapter mock
     original_gemini_adapter = mine_module.gemini_adapter
@@ -801,7 +758,7 @@ def test_abstract_with_llm_logs_warning_on_invalid_json(mine_module, caplog):
 
     assert result is None
     assert "Gemini abstraction returned invalid or empty JSON." in caplog.text
-    assert "this is not json" in caplog.text # Raw response should be logged
+    assert "this is not json" in caplog.text  # Raw response should be logged
 
     # Restore gemini_adapter
     mine_module.gemini_adapter = original_gemini_adapter
@@ -809,7 +766,7 @@ def test_abstract_with_llm_logs_warning_on_invalid_json(mine_module, caplog):
 
 def test_abstract_with_llm_logs_warning_on_missing_candidates_key(mine_module, caplog):
     """abstract_with_llm logs a warning if LLM returns valid JSON but without 'candidates' key."""
-    from unittest.mock import MagicMock, patch
+    from unittest.mock import MagicMock
 
     mock_gemini_adapter = MagicMock()
     mock_gemini_adapter.call_gemini.return_value = '{"not_candidates": []}'
@@ -824,7 +781,7 @@ def test_abstract_with_llm_logs_warning_on_missing_candidates_key(mine_module, c
 
     assert result is None
     assert "Gemini abstraction returned invalid or empty JSON." in caplog.text
-    assert '{"not_candidates": []}' in caplog.text # Raw response should be logged
+    assert '{"not_candidates": []}' in caplog.text  # Raw response should be logged
 
     # Restore gemini_adapter
     mine_module.gemini_adapter = original_gemini_adapter

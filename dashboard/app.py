@@ -23,6 +23,9 @@ from paper_trade import (
     add_journal as paper_journal,
 )
 from paper_trade import (
+    check_discipline_warnings as paper_discipline_check,
+)
+from paper_trade import (
     close_position as paper_close,
 )
 from paper_trade import (
@@ -33,7 +36,6 @@ from paper_trade import (
 )
 from paper_trade import (  # noqa: E402
     open_position as paper_open,
-    check_discipline_warnings as paper_discipline_check,
 )
 from update_marks import update_all as paper_update_marks  # noqa: E402
 
@@ -302,7 +304,9 @@ def build_exposure_cmd(latest_mb: str, market: str) -> list[str]:
         if latest_top:
             cmd.extend(["--top-risk", latest_top])
         else:
-            latest_ibd = latest_file_any(os.path.join(REPORTS_DIR, "ibd_distribution_day_monitor_*.json"))
+            latest_ibd = latest_file_any(
+                os.path.join(REPORTS_DIR, "ibd_distribution_day_monitor_*.json")
+            )
             if latest_ibd:
                 cmd.extend(["--top-risk", latest_ibd])
     return cmd
@@ -420,6 +424,7 @@ def api_run():
 
     def _run(cmd, timeout=300, extra_env=None):
         import time
+
         start_t = time.time()
         env = {**_SUBPROCESS_ENV, **(extra_env or {})}
         try:
@@ -452,7 +457,13 @@ def api_run():
             }
         except Exception as e:
             elapsed = round(time.time() - start_t, 1)
-            return {"cmd": os.path.basename(cmd[1]), "ok": False, "out": "", "err": str(e), "elapsed": elapsed}
+            return {
+                "cmd": os.path.basename(cmd[1]),
+                "ok": False,
+                "out": "",
+                "err": str(e),
+                "elapsed": elapsed,
+            }
 
     # ── Phase 1: Heavy Primary Scanners (Parallel Execution) ──────────────────────
     primary_tasks = [
@@ -742,6 +753,7 @@ def api_run_stream():
 
         def _run(cmd, timeout=300, extra_env=None):
             import time
+
             start_t = time.time()
             env = {**_SUBPROCESS_ENV, **(extra_env or {})}
             try:
@@ -774,7 +786,13 @@ def api_run_stream():
                 }
             except Exception as e:
                 elapsed = round(time.time() - start_t, 1)
-                return {"cmd": os.path.basename(cmd[1]), "ok": False, "out": "", "err": str(e), "elapsed": elapsed}
+                return {
+                    "cmd": os.path.basename(cmd[1]),
+                    "ok": False,
+                    "out": "",
+                    "err": str(e),
+                    "elapsed": elapsed,
+                }
 
         # ── Phase 1: Heavy Primary Scanners (Parallel Execution) ──────────────────────
         primary_tasks = [
@@ -946,7 +964,9 @@ def api_run_stream():
                 yield f"event: task_done\ndata: {json.dumps(res)}\n\n"
 
         # Phase 2
-        latest_mb = latest_file(os.path.join(ROOT_DIR, "market_breadth_20[0-9][0-9]-*.json"), market)
+        latest_mb = latest_file(
+            os.path.join(ROOT_DIR, "market_breadth_20[0-9][0-9]-*.json"), market
+        )
         latest_vcp = latest_file(os.path.join(REPORTS_DIR, "vcp_screener_*.json"), market)
 
         dependent_tasks = []
@@ -1006,7 +1026,9 @@ def api_run_stream():
             yield f"event: task_done\ndata: {json.dumps(res)}\n\n"
 
         if dependent_tasks:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=len(dependent_tasks)) as executor:
+            with concurrent.futures.ThreadPoolExecutor(
+                max_workers=len(dependent_tasks)
+            ) as executor:
                 futures = {
                     executor.submit(_run, cmd, timeout, env): cmd
                     for cmd, timeout, env in dependent_tasks
@@ -1307,6 +1329,119 @@ def api_paper_discipline_check():
 def api_paper_emotions():
     """Return valid emotion tags."""
     return jsonify(sorted(VALID_EMOTIONS))
+
+
+@app.route("/api/patterns")
+def api_patterns():
+    import sqlite3
+
+    db_path = os.path.join(BASE_DIR, "state", "market_cache.db")
+    if not os.path.exists(db_path):
+        return jsonify({})
+
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    c.execute(
+        "SELECT symbol, date, open, close, high, low, volume FROM price_bar ORDER BY symbol, date ASC"
+    )
+    rows = c.fetchall()
+
+    data = {}
+    for r in rows:
+        if r["open"] is None or r["close"] is None:
+            continue
+        sym = r["symbol"]
+        if sym not in data:
+            data[sym] = []
+        data[sym].append(dict(r))
+
+    oversold = []
+    overbought = []
+
+    for sym, bars in data.items():
+        if len(bars) < 10:
+            continue
+
+        consecutive_red = 0
+        consecutive_green = 0
+
+        for b in reversed(bars):
+            if b["close"] < b["open"]:
+                if consecutive_green > 0:
+                    break
+                consecutive_red += 1
+            elif b["close"] > b["open"]:
+                if consecutive_red > 0:
+                    break
+                consecutive_green += 1
+            else:
+                break
+
+        if consecutive_red >= 3 or consecutive_green >= 3:
+            is_oversold = consecutive_red >= 3
+            target_consecutive = consecutive_red if is_oversold else consecutive_green
+
+            occurrences = 0
+            wins = 0
+            sum_returns = 0
+
+            curr_streak = 0
+            for i in range(len(bars) - 1):
+                b = bars[i]
+                if is_oversold:
+                    if b["close"] < b["open"]:
+                        curr_streak += 1
+                    else:
+                        curr_streak = 0
+                else:
+                    if b["close"] > b["open"]:
+                        curr_streak += 1
+                    else:
+                        curr_streak = 0
+
+                if curr_streak == target_consecutive:
+                    next_b = bars[i + 1]
+                    occurrences += 1
+
+                    if b["close"] > 0:
+                        next_return = (next_b["close"] - b["close"]) / b["close"] * 100
+                    else:
+                        next_return = 0
+                    sum_returns += next_return
+
+                    if is_oversold and next_b["close"] > b["close"]:
+                        wins += 1
+                    elif not is_oversold and next_b["close"] < b["close"]:
+                        wins += 1
+
+            if occurrences > 0:
+                win_rate = (wins / occurrences) * 100
+                avg_return = sum_returns / occurrences
+
+                if occurrences >= 3 and win_rate > 50.0:
+                    latest = bars[-1]
+                    item = {
+                        "symbol": sym,
+                        "consecutive": target_consecutive,
+                        "occurrences": occurrences,
+                        "win_rate": round(win_rate, 2),
+                        "avg_return": round(avg_return, 2),
+                        "latest": {
+                            "date": latest["date"],
+                            "open": latest["open"],
+                            "high": latest["high"],
+                            "low": latest["low"],
+                            "close": latest["close"],
+                            "volume": latest["volume"],
+                        },
+                    }
+                    if is_oversold:
+                        oversold.append(item)
+                    else:
+                        overbought.append(item)
+
+    return jsonify({"Oversold": oversold, "Overbought": overbought})
 
 
 if __name__ == "__main__":

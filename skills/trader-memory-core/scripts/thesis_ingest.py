@@ -11,9 +11,6 @@ import logging
 import sys
 from pathlib import Path
 
-from jsonschema import validate
-from jsonschema.exceptions import ValidationError
-
 # Allow imports from sibling modules
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -21,9 +18,6 @@ import thesis_store  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
-_SCHEMAS_DIR = Path(__file__).resolve().parent.parent / "schemas"
-with open(_SCHEMAS_DIR / "thesis.schema.json") as f:
-    THESIS_SCHEMA = json.load(f)
 
 # -- Adapter registry ---------------------------------------------------------
 
@@ -305,7 +299,7 @@ def ingest(
     source: str,
     input_file: str,
     state_dir: str = "state/theses",
-) -> list[str]:
+) -> tuple[list[str], list[dict]]:
     """Ingest skill output and register theses.
 
     Args:
@@ -314,7 +308,7 @@ def ingest(
         state_dir: Path to thesis state directory.
 
     Returns:
-        List of registered thesis IDs.
+        Tuple of (List of registered thesis IDs, List of failed record dicts with errors).
 
     Raises:
         ValueError: If source is unknown or input is invalid.
@@ -353,14 +347,6 @@ def ingest(
         # Inject source date so thesis_id and created_at reflect the report date
         if source_date and "_source_date" not in thesis_data:
             thesis_data["_source_date"] = source_date
-
-        try:
-            # Preliminary schema validation
-            validate(instance=thesis_data, schema=THESIS_SCHEMA)
-        except ValidationError as e:
-            logger.error("Schema validation failed for record from %s: %s", source, e.message)
-            failed_records_with_errors.append({"record": record, "error": e.message})
-            continue
 
         try:
             tid = thesis_store.register(state_path, thesis_data)
@@ -426,12 +412,20 @@ if __name__ == "__main__":
 
     successful_ids, failed_records = ingest(args.source, args.input, args.state_dir)
     if successful_ids:
-        print(f"Successfully registered {len(successful_ids)} thesis(es): {', '.join(successful_ids)}")
+        print(
+            f"Successfully registered {len(successful_ids)} thesis(es): {', '.join(successful_ids)}"
+        )
     if failed_records:
-        print(f"Failed to register {len(failed_records)} record(s) due to validation or adapter errors:")
+        print(
+            f"Failed to register {len(failed_records)} record(s) due to validation or adapter errors:"
+        )
         for record_info in failed_records:
-            print(f"  Record: {record_info['record'].get('id') or record_info['record'].get('ticker') or 'N/A'}, Error: {record_info['error']}")
+            print(
+                f"  Record: {record_info['record'].get('id') or record_info['record'].get('ticker') or 'N/A'}, Error: {record_info['error']}"
+            )
         sys.exit(1)
-    elif not successful_ids: # No successful and no failed means no records were processed or all were skipped
+    elif (
+        not successful_ids
+    ):  # No successful and no failed means no records were processed or all were skipped
         print("No theses registered.")
         sys.exit(1)

@@ -55,15 +55,16 @@ class FMPPriceAdapter:
                 with urllib.request.urlopen(req, timeout=30) as resp:
                     raw_data = resp.read().decode()
                     data = json.loads(raw_data)
-            except urllib.error.HTTPError as e:
+            except urllib.error.URLError as e:
                 last_error = e
                 logger.debug("FMP endpoint %s failed for %s: %s", base_url, ticker, e)
                 continue
             except json.JSONDecodeError as e:
-                last_error = e # Keep track of the last error for comprehensive logging.
-                logger.warning("FMP API response for %s is not valid JSON from %s: %s", ticker, base_url, e)
+                last_error = e  # Keep track of the last error for comprehensive logging.
+                logger.warning(
+                    "FMP API response for %s is not valid JSON from %s: %s", ticker, base_url, e
+                )
                 continue
-
 
             historical = self._extract_historical(data, ticker)
             if not historical:

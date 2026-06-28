@@ -539,6 +539,9 @@ def generate_objective_reframes(
             proposal_id = sanitize_identifier(f"pivot_{source_id}_reframe_{trigger}_{arch_id}")
             new_draft = _build_base_draft(draft, arch_id, arch, proposal_id)
 
+            # Preserve original exit params for reframes
+            new_draft["exit"] = dict(draft.get("exit", new_draft["exit"]))
+
             # Apply reframe adjustments
             if reframe.get("exit_adjustments"):
                 for k, v in reframe["exit_adjustments"].items():
@@ -678,7 +681,7 @@ def rank_and_select(
 
 
 def build_export_ticket_if_eligible(
-    draft: dict[str, Any]
+    draft: dict[str, Any],
 ) -> tuple[dict[str, Any] | None, list[str]]:
     """Build export ticket if entry_family is exportable. Returns (ticket, errors)."""
     entry_family = draft.get("entry_family", "")
@@ -876,7 +879,8 @@ def _build_report(
     ]
 
     for t in diagnosis.get("triggers_fired", []):
-        lines.append(f"- **{t['trigger']}** [{t['severity']}]: {t['message']}")
+        msg = t.get("message", "No description provided")
+        lines.append(f"- **{t['trigger']}** [{t['severity']}]: {msg}")
 
     lines.extend(["", "---", "", "## Pivot Proposals", ""])
 
@@ -961,7 +965,11 @@ def main() -> int:
         return 1
 
     diagnosis = json.loads(diagnosis_path.read_text())
-    source_draft = yaml.safe_load(strategy_path.read_text())
+    try:
+        source_draft = yaml.safe_load(strategy_path.read_text())
+    except yaml.YAMLError as exc:
+        print(f"[ERROR] strategy file is not valid YAML: {exc}")
+        return 1
 
     if not isinstance(source_draft, dict):
         print("[ERROR] strategy file must be a YAML mapping")

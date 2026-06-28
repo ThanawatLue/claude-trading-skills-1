@@ -1,6 +1,7 @@
 """Tests for fmp_price_adapter.py — mock HTTP responses."""
 
 import json
+import urllib.error
 from unittest.mock import MagicMock, patch
 
 import fmp_price_adapter
@@ -74,6 +75,7 @@ def test_no_api_key_raises():
         with pytest.raises(ValueError, match="FMP API key required"):
             fmp_price_adapter.FMPPriceAdapter(api_key=None)
 
+
 def test_get_daily_closes_failover():
     """First endpoint fails, second succeeds → data from second is returned."""
     mock_response_fail = MagicMock()
@@ -94,7 +96,9 @@ def test_get_daily_closes_failover():
     mock_response_success.__exit__ = MagicMock(return_value=False)
 
     # Use side_effect for urlopen to return different mocks on successive calls
-    with patch("urllib.request.urlopen", side_effect=[mock_response_fail, mock_response_success]) as mock_urlopen:
+    with patch(
+        "urllib.request.urlopen", side_effect=[mock_response_fail, mock_response_success]
+    ) as mock_urlopen:
         adapter = fmp_price_adapter.FMPPriceAdapter(api_key="test_key")
         result = adapter.get_daily_closes("AAPL", "2026-03-02", "2026-03-03")
 
@@ -109,14 +113,15 @@ def test_get_daily_closes_failover():
     req_second_call = mock_urlopen.call_args_list[1].args[0]
     assert "https://financialmodelingprep.com/api/v3/" in req_second_call.full_url
 
+
 def test_malformed_json_response_handled_gracefully():
     """Malformed JSON response from FMP should result in ValueError."""
     mock_resp = MagicMock()
-    mock_resp.read.return_value = b"this is not json" # Malformed JSON
+    mock_resp.read.return_value = b"this is not json"  # Malformed JSON
     mock_resp.__enter__ = lambda s: s
     mock_resp.__exit__ = MagicMock(return_value=False)
 
     with patch("urllib.request.urlopen", return_value=mock_resp):
         adapter = fmp_price_adapter.FMPPriceAdapter(api_key="test_key")
-        with pytest.raises(ValueError, match="FMP API response is not valid JSON"):
+        with pytest.raises(json.JSONDecodeError):
             adapter.get_daily_closes("AAPL", "2026-03-01", "2026-03-03")

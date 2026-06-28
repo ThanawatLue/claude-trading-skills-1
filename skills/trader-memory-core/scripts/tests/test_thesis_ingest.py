@@ -31,7 +31,7 @@ def test_ingest_kanchi(tmp_path: Path):
     }
     input_file = _write_json(tmp_path, {"candidates": [record]})
 
-    ids = thesis_ingest.ingest("kanchi-dividend-sop", input_file, str(state_dir))
+    ids, errors = thesis_ingest.ingest("kanchi-dividend-sop", input_file, str(state_dir))
     assert len(ids) == 1
 
     thesis = thesis_store.get(state_dir, ids[0])
@@ -57,7 +57,7 @@ def test_ingest_earnings(tmp_path: Path):
     }
     input_file = _write_json(tmp_path, {"results": [record]})
 
-    ids = thesis_ingest.ingest("earnings-trade-analyzer", input_file, str(state_dir))
+    ids, errors = thesis_ingest.ingest("earnings-trade-analyzer", input_file, str(state_dir))
     assert len(ids) == 1
 
     thesis = thesis_store.get(state_dir, ids[0])
@@ -83,7 +83,7 @@ def test_ingest_vcp(tmp_path: Path):
     }
     input_file = _write_json(tmp_path, {"results": [record]})
 
-    ids = thesis_ingest.ingest("vcp-screener", input_file, str(state_dir))
+    ids, errors = thesis_ingest.ingest("vcp-screener", input_file, str(state_dir))
     assert len(ids) == 1
 
     thesis = thesis_store.get(state_dir, ids[0])
@@ -107,7 +107,7 @@ def test_ingest_pead(tmp_path: Path):
     }
     input_file = _write_json(tmp_path, {"results": [record]})
 
-    ids = thesis_ingest.ingest("pead-screener", input_file, str(state_dir))
+    ids, errors = thesis_ingest.ingest("pead-screener", input_file, str(state_dir))
     assert len(ids) == 1
 
     thesis = thesis_store.get(state_dir, ids[0])
@@ -128,7 +128,7 @@ def test_ingest_canslim(tmp_path: Path):
     }
     input_file = _write_json(tmp_path, [record])
 
-    ids = thesis_ingest.ingest("canslim-screener", input_file, str(state_dir))
+    ids, errors = thesis_ingest.ingest("canslim-screener", input_file, str(state_dir))
     assert len(ids) == 1
 
     thesis = thesis_store.get(state_dir, ids[0])
@@ -150,7 +150,7 @@ def test_all_adapters_preserve_raw_provenance(tmp_path: Path):
     }
     input_file = _write_json(tmp_path, {"results": [record]})
 
-    ids = thesis_ingest.ingest("earnings-trade-analyzer", input_file, str(state_dir))
+    ids, errors = thesis_ingest.ingest("earnings-trade-analyzer", input_file, str(state_dir))
     thesis = thesis_store.get(state_dir, ids[0])
     assert thesis["origin"]["raw_provenance"]["custom_field"] == "custom_value"
 
@@ -172,7 +172,7 @@ def test_missing_required_fields_raises(tmp_path: Path):
     input_file = _write_json(tmp_path, {"results": [record]})
 
     # Should log error but not raise (continues to next record)
-    ids = thesis_ingest.ingest("earnings-trade-analyzer", input_file, str(state_dir))
+    ids, errors = thesis_ingest.ingest("earnings-trade-analyzer", input_file, str(state_dir))
     assert len(ids) == 0
 
 
@@ -190,7 +190,7 @@ def test_edge_research_only_skipped(tmp_path: Path):
     }
     input_file = _write_json(tmp_path, record)
 
-    ids = thesis_ingest.ingest("edge-candidate-agent", input_file, str(state_dir))
+    ids, errors = thesis_ingest.ingest("edge-candidate-agent", input_file, str(state_dir))
     assert len(ids) == 0
 
 
@@ -204,7 +204,7 @@ def test_edge_market_basket_skipped(tmp_path: Path):
     }
     input_file = _write_json(tmp_path, record)
 
-    ids = thesis_ingest.ingest("edge-candidate-agent", input_file, str(state_dir))
+    ids, errors = thesis_ingest.ingest("edge-candidate-agent", input_file, str(state_dir))
     assert len(ids) == 0
 
 
@@ -217,7 +217,7 @@ def test_ingest_kanchi_rows_key(tmp_path: Path):
     record = {"ticker": "PG", "buy_target_price": 165.00}
     input_file = _write_json(tmp_path, {"rows": [record]})
 
-    ids = thesis_ingest.ingest("kanchi-dividend-sop", input_file, str(state_dir))
+    ids, errors = thesis_ingest.ingest("kanchi-dividend-sop", input_file, str(state_dir))
     assert len(ids) == 1
     thesis = thesis_store.get(state_dir, ids[0])
     assert thesis["ticker"] == "PG"
@@ -238,7 +238,7 @@ def test_edge_ticket_top_level_entry_exit(tmp_path: Path):
     }
     input_file = _write_json(tmp_path, record)
 
-    ids = thesis_ingest.ingest("edge-candidate-agent", input_file, str(state_dir))
+    ids, errors = thesis_ingest.ingest("edge-candidate-agent", input_file, str(state_dir))
     assert len(ids) == 1
     thesis = thesis_store.get(state_dir, ids[0])
     assert thesis["entry"]["conditions"] == ["breakout above pivot", "volume > 1.5x avg"]
@@ -260,7 +260,7 @@ def test_ingest_propagates_as_of_date(tmp_path: Path):
     }
     input_file = _write_json(tmp_path, data)
 
-    ids = thesis_ingest.ingest("kanchi-dividend-sop", input_file, str(state_dir))
+    ids, errors = thesis_ingest.ingest("kanchi-dividend-sop", input_file, str(state_dir))
     assert len(ids) == 1
     assert "_20260220_" in ids[0]
     thesis = thesis_store.get(state_dir, ids[0])
@@ -276,7 +276,7 @@ def test_ingest_uses_generated_at_as_fallback(tmp_path: Path):
     }
     input_file = _write_json(tmp_path, data)
 
-    ids = thesis_ingest.ingest("earnings-trade-analyzer", input_file, str(state_dir))
+    ids, errors = thesis_ingest.ingest("earnings-trade-analyzer", input_file, str(state_dir))
     assert "_20260110_" in ids[0]
 
 
@@ -289,7 +289,7 @@ def test_duplicate_ingest_is_idempotent(tmp_path: Path):
     record = {"symbol": "AAPL", "grade": "A", "composite_score": 90.0}
     input_file = _write_json(tmp_path, {"results": [record]})
 
-    ids1 = thesis_ingest.ingest("earnings-trade-analyzer", input_file, str(state_dir))
-    ids2 = thesis_ingest.ingest("earnings-trade-analyzer", input_file, str(state_dir))
+    ids1, _ = thesis_ingest.ingest("earnings-trade-analyzer", input_file, str(state_dir))
+    ids2, _ = thesis_ingest.ingest("earnings-trade-analyzer", input_file, str(state_dir))
 
     assert ids1[0] == ids2[0]

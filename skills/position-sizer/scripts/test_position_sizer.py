@@ -1,61 +1,31 @@
-import unittest
 import json
 import os
-from unittest.mock import patch, MagicMock
-from datetime import datetime, timedelta
-from pathlib import Path
 import shutil
-import unittest.mock as mock
-import time
 
 # Assume SizingParameters, get_latest_posture, calculate_position are imported or defined here
 # For the purpose of this test file, we'll import them relative to the current directory
-from skills.position_sizer.scripts.position_sizer import (
+import sys
+import time
+import unittest
+from datetime import datetime, timedelta
+from pathlib import Path
+from unittest.mock import patch
+
+sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
+from position_sizer import (
     SizingParameters,
-    get_latest_posture,
     calculate_position,
+    get_latest_posture,
 )
 
-class TestPositionSizer(unittest.TestCase):
 
+class TestPositionSizer(unittest.TestCase):
     def setUp(self):
         # Create a temporary directory for test reports
         self.test_reports_dir = Path("test_reports")
         self.test_reports_dir.mkdir(exist_ok=True, parents=True)
 
-        # Mock the Path class itself: When Path() is called, it returns this mock
-        mock_path_class_return = mock.MagicMock(spec=Path) # This is what Path(...) returns
-
-        # We need Path(__file__).resolve().parents[3] to work
-        # So, when Path is called, it returns `mock_path_class_return`
-        # Then, when .resolve() is called on `mock_path_class_return`, it returns `mock_resolved_path`
-        mock_resolved_path = mock.MagicMock(spec=Path)
-        mock_path_class_return.resolve.return_value = mock_resolved_path
-
-        # Then, when .parents is accessed on `mock_resolved_path`, it returns `mock_parents`
-        mock_parents = mock.MagicMock()
-        mock_resolved_path.parents = mock_parents
-
-        # Finally, when [3] is accessed on `mock_parents`, it returns our desired path
-        mock_parents.__getitem__.return_value = self.test_reports_dir.parent.parent
-
-        # Patch `pathlib.Path` directly, because it's imported inside the function
-        # This will affect all calls to `pathlib.Path` within `get_latest_posture`
-        self.patcher_path = patch(
-            "pathlib.Path", return_value=mock_path_class_return
-        )
-        self.mock_path = self.patcher_path.start()
-
-        # Patch glob.glob since it's imported inside the function
-        # This one seems to be correct based on previous runs.
-        self.patcher_glob = patch("glob.glob")
-        self.mock_glob = self.patcher_glob.start()
-
     def tearDown(self):
-        # Stop patches first
-        self.patcher_path.stop() # Use the correct patcher name
-        self.patcher_glob.stop()
-        
         # Clean up the temporary directory
         time.sleep(0.05)
         if self.test_reports_dir.exists():
@@ -102,9 +72,15 @@ class TestPositionSizer(unittest.TestCase):
             "recommendation": "CASH_PRIORITY",
         }
 
-        self._create_posture_file(f"exposure_posture_{yesterday.strftime('%Y-%m-%d_%H%M%S')}.json", posture_yesterday)
-        self._create_posture_file(f"exposure_posture_{today.strftime('%Y-%m-%d_%H%M%S')}.json", posture_today)
-        self._create_posture_file(f"exposure_posture_{tomorrow.strftime('%Y-%m-%d_%H%M%S')}.json", posture_tomorrow)
+        self._create_posture_file(
+            f"exposure_posture_{yesterday.strftime('%Y-%m-%d_%H%M%S')}.json", posture_yesterday
+        )
+        self._create_posture_file(
+            f"exposure_posture_{today.strftime('%Y-%m-%d_%H%M%S')}.json", posture_today
+        )
+        self._create_posture_file(
+            f"exposure_posture_{tomorrow.strftime('%Y-%m-%d_%H%M%S')}.json", posture_tomorrow
+        )
 
         posture = get_latest_posture("US", reports_dir=str(self.test_reports_dir))
         self.assertIsNotNone(posture)
@@ -121,8 +97,12 @@ class TestPositionSizer(unittest.TestCase):
             "metadata": {"market": "TH", "generated_at": today.isoformat()},
             "recommendation": "CASH_PRIORITY",
         }
-        self._create_posture_file(f"exposure_posture_{today.strftime('%Y-%m-%d_%H%M%S')}.json", us_posture)
-        self._create_posture_file(f"exposure_posture_{today.strftime('%Y-%m-%d_%H%M%S')}_TH.json", th_posture)
+        self._create_posture_file(
+            f"exposure_posture_{today.strftime('%Y-%m-%d_%H%M%S')}.json", us_posture
+        )
+        self._create_posture_file(
+            f"exposure_posture_{today.strftime('%Y-%m-%d_%H%M%S')}_TH.json", th_posture
+        )
 
         us_result = get_latest_posture("US", reports_dir=str(self.test_reports_dir))
         th_result = get_latest_posture("TH", reports_dir=str(self.test_reports_dir))
@@ -134,7 +114,7 @@ class TestPositionSizer(unittest.TestCase):
         self.assertEqual(th_result["recommendation"], "CASH_PRIORITY")
         self.assertIsNone(none_result)
 
-    @patch("skills.position_sizer.scripts.position_sizer.get_latest_posture")
+    @patch("position_sizer.get_latest_posture")
     def test_calculate_position_posture_cash_priority(self, mock_get_latest_posture):
         mock_get_latest_posture.return_value = {
             "metadata": {"market": "US"},
@@ -146,9 +126,9 @@ class TestPositionSizer(unittest.TestCase):
         )
         result = calculate_position(params)
         self.assertEqual(result["posture_applied"]["risk_multiplier"], 0.0)
-        self.assertEqual(result["final_recommended_shares"], 0) # 0 shares due to 0 risk_pct
+        self.assertEqual(result["final_recommended_shares"], 0)  # 0 shares due to 0 risk_pct
 
-    @patch("skills.position_sizer.scripts.position_sizer.get_latest_posture")
+    @patch("position_sizer.get_latest_posture")
     def test_calculate_position_posture_reduce_only(self, mock_get_latest_posture):
         mock_get_latest_posture.return_value = {
             "metadata": {"market": "US"},
@@ -166,8 +146,7 @@ class TestPositionSizer(unittest.TestCase):
         self.assertEqual(result["final_recommended_shares"], 500)
         self.assertAlmostEqual(result["final_risk_pct"], 0.5)
 
-
-    @patch("skills.position_sizer.scripts.position_sizer.get_latest_posture")
+    @patch("position_sizer.get_latest_posture")
     def test_calculate_position_posture_new_entry_allowed(self, mock_get_latest_posture):
         mock_get_latest_posture.return_value = {
             "metadata": {"market": "US"},
@@ -182,11 +161,11 @@ class TestPositionSizer(unittest.TestCase):
         self.assertEqual(result["final_recommended_shares"], 1000)
         self.assertAlmostEqual(result["final_risk_pct"], 1.0)
 
-    @patch("skills.position_sizer.scripts.position_sizer.get_latest_posture")
+    @patch("position_sizer.get_latest_posture")
     def test_calculate_position_ignore_posture_flag(self, mock_get_latest_posture):
         mock_get_latest_posture.return_value = {
             "metadata": {"market": "US"},
-            "recommendation": "CASH_PRIORITY", # This should be ignored
+            "recommendation": "CASH_PRIORITY",  # This should be ignored
             "exposure_ceiling_pct": 0,
         }
         params = SizingParameters(
@@ -203,9 +182,9 @@ class TestPositionSizer(unittest.TestCase):
         self.assertEqual(result["final_recommended_shares"], 1000)
         self.assertAlmostEqual(result["final_risk_pct"], 1.0)
 
-    @patch("skills.position_sizer.scripts.position_sizer.get_latest_posture")
+    @patch("position_sizer.get_latest_posture")
     def test_calculate_position_no_posture_data_found(self, mock_get_latest_posture):
-        mock_get_latest_posture.return_value = None # Simulate no posture data file found
+        mock_get_latest_posture.return_value = None  # Simulate no posture data file found
         params = SizingParameters(
             account_size=100000, entry_price=100, stop_price=99, risk_pct=1.0, market="US"
         )
@@ -215,12 +194,11 @@ class TestPositionSizer(unittest.TestCase):
         self.assertAlmostEqual(result["final_risk_pct"], 1.0)
         self.assertEqual(result["posture_applied"]["recommendation"], "NEW_ENTRY_ALLOWED")
 
-
-    @patch("skills.position_sizer.scripts.position_sizer.get_latest_posture")
+    @patch("position_sizer.get_latest_posture")
     def test_calculate_position_kelly_posture_scaling(self, mock_get_latest_posture):
         mock_get_latest_posture.return_value = {
             "metadata": {"market": "US"},
-            "recommendation": "REDUCE_ONLY", # Should scale Kelly by 0.5
+            "recommendation": "REDUCE_ONLY",  # Should scale Kelly by 0.5
             "exposure_ceiling_pct": 50,
         }
         params = SizingParameters(
@@ -230,15 +208,16 @@ class TestPositionSizer(unittest.TestCase):
             avg_loss=1.0,
             entry_price=10,
             stop_price=9,
-            market="US"
+            market="US",
         )
         result = calculate_position(params)
-        # Half Kelly for 0.55 win, 2.5/1 R is ~11.67%. Multiplied by 0.5 -> ~5.83%
-        self.assertAlmostEqual(result["calculations"]["kelly"]["half_kelly_pct"], 5.83, places=2)
-        # dollar_risk = 100000 * 0.0583 = 5830
-        # shares = 5830 / (10-9) = 5830
-        self.assertEqual(result["final_recommended_shares"], 5830)
-        self.assertAlmostEqual(result["final_risk_pct"], 5.83, places=2)
+        # Half Kelly for 0.55 win, 2.5/1 R is 18.5%. Multiplied by 0.5 -> 9.25%
+        self.assertAlmostEqual(result["calculations"]["kelly"]["half_kelly_pct"], 9.25, places=2)
+        # dollar_risk = 100000 * 0.0925 = 9250
+        # shares = 9250 / (10-9) = 9250
+        self.assertEqual(result["final_recommended_shares"], 9250)
+        self.assertAlmostEqual(result["final_risk_pct"], 9.25, places=2)
+
 
 if __name__ == "__main__":
     unittest.main()

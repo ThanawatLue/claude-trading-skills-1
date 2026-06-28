@@ -6,10 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import os
 import re
-import shutil
-import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -114,12 +111,10 @@ def find_project_dirs(
     for child in sorted(base_dir.iterdir()):
         if not child.is_dir():
             continue
-        # Directory name is encoded as dash-separated absolute path segments.
-        # The actual project name is the last segment.
-        encoded_project_name = child.name.split("-")[-1]
-        if encoded_project_name in allowlist:
-            matches.append((encoded_project_name, child))
-            break
+        for allowed in allowlist:
+            if child.name == allowed or child.name.endswith(f"-{allowed}"):
+                matches.append((allowed, child))
+                break
 
     return matches
 
@@ -492,7 +487,7 @@ def abstract_with_llm(
     response_text = gemini_adapter.call_gemini(
         prompt,
         model_name=model_name,  # Use the model_name argument
-        response_mime_type="application/json"
+        response_mime_type="application/json",
     )
 
     if response_text:
@@ -577,9 +572,6 @@ def _build_llm_prompt(
     )
 
     return "\n".join(parts)
-
-
-
 
 
 def filter_non_trading_candidates(candidates: list[dict]) -> list[dict]:

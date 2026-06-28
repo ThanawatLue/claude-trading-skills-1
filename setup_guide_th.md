@@ -66,27 +66,30 @@ python install.py
 
 ---
 
-## 🛠️ ตัวอย่างการเรียกใช้คำสั่งสแกนด้วยตนเอง (Manual Execution Examples)
+## 🛠️ โฟลว์การทำงาน 2 ขั้นตอน (The 2-Step Trading Workflow)
 
-เมื่อระบบสร้าง virtual environment เรียบร้อยแล้ว ท่านสามารถรันสคริปต์วิเคราะห์หุ้นต่างๆ ผ่านคอมมานด์ไลน์ได้ ตัวอย่างเช่น:
+ระบบถูกออกแบบมาให้ทำงานประสานกันระหว่าง **การสแกนหาหุ้น (Stock Selection)** และ **การหาจังหวะเข้าทำ (Execution Timing)**
 
-### 1. การดึงปฏิทินเศรษฐกิจ (Economic Calendar):
+### ขั้นตอนที่ 1: รันสแกนหาหุ้นช้างเผือก (Screener)
+ใช้คำสั่งสแกนผ่าน Terminal เพื่อคัดกรองหุ้นเด่นจากทั้งตลาด (รันช่วงบ่ายๆ ก่อนตลาดปิด):
+
+**ตัวอย่าง 1: สแกนหาหุ้นทรง VCP (ระเบิดราคา)**
 ```bash
-# Windows
-.venv\Scripts\python skills/economic-calendar-fetcher/scripts/get_economic_calendar.py
-
-# macOS / Linux
-.venv/bin/python skills/economic-calendar-fetcher/scripts/get_economic_calendar.py
+.venv\Scripts\python skills/vcp-screener/scripts/screen_vcp.py
 ```
 
-### 2. การสแกนหาจุดกลับตัวของปันผลเติบโต (Dividend Growth Pullback):
+**ตัวอย่าง 2: สแกนหาหุ้นเติบโต CANSLIM**
 ```bash
-.venv\Scripts\python skills/dividend-growth-pullback-screener/scripts/screen_dividend_growth.py --max-candidates 40
+.venv\Scripts\python skills/canslim-screener/scripts/screen_canslim.py
 ```
 
-### 3. การตรวจสอบคุณภาพไฟล์ผลลัพธ์ (Data Quality Checker):
-```bash
-.venv\Scripts\python skills/data-quality-checker/scripts/validate_reports.py
-```
+*รายงานการสแกนและรายชื่อหุ้นจะถูกเซฟเก็บไว้ในโฟลเดอร์ `reports/`*
 
-*รายงานการสแกนทั้งหมดจะถูกเซฟเก็บไว้โดยอัตโนมัติในโฟลเดอร์ `reports/` ซึ่งท่านสามารถเปิดดูผ่านหน้าเว็บ Dashboard ได้ทันที*
+### ขั้นตอนที่ 2: เล็งเป้าและหาจังหวะด้วย Dashboard (Timing)
+1. นำรายชื่อหุ้นที่ได้จากการสแกนในขั้นตอนที่ 1 (เช่น 5-10 ตัว) มาเปิดดูในหน้าเว็บ Dashboard (`http://localhost:5050`)
+2. ช่วงเวลาประมาณ **16.00 น. - 16.25 น.** ให้นำเมาส์ไปชี้ที่แท่งเทียนวันล่าสุดของหุ้นแต่ละตัว
+3. ดู **Dynamic Pattern Stats (Next Day)**:
+   - หากสถิติบอกว่า Last 3, Last 5 มี **Win Rate สูง (80-100%)** และผลตอบแทนเฉลี่ยเป็น **สีเขียว** ➡️ **พิจารณาเข้าซื้อแบบ ATC (At The Close)**
+   - หากสถิติ Win Rate ต่ำ หรือ ค่าเฉลี่ยติดลบหนัก ➡️ **ข้ามไปดูตัวอื่น**
+
+ระบบนี้จะช่วยให้คุณตัดอารมณ์ออกจากการเทรด และตัดสินใจด้วยความน่าจะเป็นทางสถิติครับ!

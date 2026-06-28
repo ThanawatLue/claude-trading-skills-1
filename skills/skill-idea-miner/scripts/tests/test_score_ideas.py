@@ -161,7 +161,7 @@ def test_load_backlog_non_existent(score_module, tmp_path: Path):
 def test_load_backlog_malformed(score_module, tmp_path: Path, caplog):
     """Logs a warning and returns empty structure for a malformed backlog file."""
     backlog_path = tmp_path / "malformed_backlog.yaml"
-    backlog_path.write_text("not: [valid: yaml]")
+    backlog_path.write_text("[\n}\n")
 
     with caplog.at_level(score_module.logging.WARNING):
         result = score_module.load_backlog(backlog_path)

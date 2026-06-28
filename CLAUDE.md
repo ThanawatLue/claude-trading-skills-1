@@ -67,6 +67,13 @@ Each skill follows a standardized directory structure:
 
 **`skills-index.yaml`** (root) is the authoritative metadata registry for all skills — `integrations[]`, `inputs`, `outputs`, `workflows` back-references, and `hand_written_doc` flag all live here. The API Requirements Matrix in README and skill catalog are auto-generated from this file; edit the index rather than the generated sections.
 
+## Agent Initialization on a New Machine
+
+When you (the AI agent) are first invoked on a newly cloned or copied version of this repository on a new machine, you MUST automatically initialize the project for the user by following these steps:
+1. Run `python install.py` from the root directory. This script will automatically set up `uv`, install dependencies into a virtual environment, create necessary local directories (`reports/`, `logs/`, etc.), and copy `.env.template` to `.env`.
+2. Remind the user to populate their API keys in the newly created `.env` file (e.g., FMP, FINVIZ, Alpaca).
+3. Confirm that the dashboard can start by providing them the command: `.venv/bin/python dashboard/app.py` (macOS/Linux) or `run_dashboard.bat` (Windows).
+
 ## Development Commands
 
 This project uses [`uv`](https://docs.astral.sh/uv/) as the package manager.
