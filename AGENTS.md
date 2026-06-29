@@ -935,6 +935,12 @@ This is a **public repository**. Never hardcode personal information:
 
 Files that contain secrets (`.mcp.json`, `.envrc`) must be listed in `.gitignore` and never committed.
 
+### Stock Recommendation & Analysis Workflow
+
+When the user requests stock suggestions or analysis from the dashboard:
+- You must perform a comprehensive evaluation of BOTH the chart/pattern techniques (VCP structure, breakouts, etc.) and ALL the detailed statistics (Confluence Score, Day Bias, Relative Strength Rank, and Pattern Stats).
+- Never recommend a stock based solely on VCP proximity or trend status without cross-checking its stats (e.g. making sure it is not a Laggard with a low RS rank, or checking if the current day has a highly unfavorable Day Bias).
+
 ## Language Considerations
 
 - All SKILL.md files are in English
