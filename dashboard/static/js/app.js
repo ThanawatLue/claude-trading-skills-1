@@ -170,6 +170,22 @@ let CURRENT_BREAKOUT_PLAN = null;
 // Default market = TH (Thai market). Will be overridden by loadSettings() from localStorage
 // if user has previously selected another market.
 let currentMarket = 'TH';
+window.BENCHMARK_DATA = null;
+
+async function fetchBenchmarkData(m) {
+  const symbol = m === 'TH' ? '^SET.BK' : 'SPY';
+  try {
+    const res = await fetch(`/api/history/${symbol}`);
+    if (res.ok) {
+      window.BENCHMARK_DATA = await res.json();
+    } else {
+      window.BENCHMARK_DATA = null;
+    }
+  } catch (e) {
+    console.error("Failed to load benchmark data for " + symbol, e);
+    window.BENCHMARK_DATA = null;
+  }
+}
 let VCP_SORT = { col: 'composite_score', dir: -1 };
 let CANSLIM_SORT = { col: 'composite_score', dir: -1 };
 let _canslimResults = [];
@@ -226,7 +242,8 @@ function findStockInRawData(sym) {
         companyName: found.company_name,
         price: found.price,
         state: found.execution_state,
-        changePct: found.relative_strength?.daily_change_pct || null
+        changePct: found.relative_strength?.daily_change_pct || null,
+        sector: found.sector || null
       };
     }
   }
@@ -241,7 +258,8 @@ function findStockInRawData(sym) {
         companyName: found.company_name,
         price: found.price,
         state: stateLabel,
-        changePct: null
+        changePct: null,
+        sector: found.sector || null
       };
     }
   }
@@ -254,7 +272,8 @@ function findStockInRawData(sym) {
         companyName: found.name,
         price: found.price || found.plan?.entry,
         state: 'Swing Trade Setup',
-        changePct: null
+        changePct: null,
+        sector: found.sector || null
       };
     }
   }
@@ -267,7 +286,8 @@ function findStockInRawData(sym) {
           companyName: '',
           price: found.price,
           state: `Watchlist (${bucket.toUpperCase()})`,
-          changePct: null
+          changePct: null,
+          sector: found.sector || null
         };
       }
     }
@@ -280,7 +300,8 @@ function findStockInRawData(sym) {
         companyName: '',
         price: found.price,
         state: `Dividend (${found.grade})`,
-        changePct: null
+        changePct: null,
+        sector: found.sector || null
       };
     }
   }
@@ -389,6 +410,248 @@ function calculatePatternStats(bars, currentIndex) {
       let rSum = 0;
       for (let j = 0; j < 10; j++) rSum += (bars[i - j].high - bars[i - j].low);
       range10.push(rSum / 10);
+    }
+  }
+
+  // ── True Range & ATR 14 ──
+  const tr = [];
+  for (let i = 0; i < bars.length; i++) {
+    if (i === 0) {
+      tr.push(bars[i].high - bars[i].low);
+    } else {
+      tr.push(Math.max(
+        bars[i].high - bars[i].low,
+        Math.abs(bars[i].high - bars[i-1].close),
+        Math.abs(bars[i].low - bars[i-1].close)
+      ));
+    }
+  }
+  const atr14 = [];
+  for (let i = 0; i < bars.length; i++) {
+    if (i < 13) {
+      atr14.push(null);
+    } else {
+      let sum = 0;
+      for (let j = 0; j < 14; j++) sum += tr[i-j];
+      atr14.push(sum / 14);
+    }
+  }
+
+  // ── RSI 14 ──
+  const rsi14 = [];
+  let avgGain = 0;
+  let avgLoss = 0;
+  for (let i = 0; i < bars.length; i++) {
+    if (i === 0) {
+      rsi14.push(null);
+      continue;
+    }
+    const diff = bars[i].close - bars[i-1].close;
+    const gain = diff > 0 ? diff : 0;
+    const loss = diff < 0 ? -diff : 0;
+    if (i <= 14) {
+      avgGain += gain;
+      avgLoss += loss;
+      if (i === 14) {
+        avgGain /= 14;
+        avgLoss /= 14;
+        const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
+        rsi14.push(100 - (100 / (1 + rs)));
+      } else {
+        rsi14.push(null);
+      }
+    } else {
+      avgGain = (avgGain * 13 + gain) / 14;
+      avgLoss = (avgLoss * 13 + loss) / 14;
+      const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
+      rsi14.push(100 - (100 / (1 + rs)));
+    }
+  }
+
+  // ── RSI Divergences ──
+  let isRsiBullDiv = false;
+  let isRsiBearDiv = false;
+  if (currentIndex >= 20 && rsi14[currentIndex] !== null) {
+    const priceToday = bars[currentIndex].close;
+    const rsiToday = rsi14[currentIndex];
+
+    let prevLowIdx = -1;
+    for (let j = currentIndex - 5; j >= currentIndex - 25; j--) {
+      if (j >= 2 && bars[j].low <= bars[j-1].low && bars[j].low <= bars[j-2].low &&
+          bars[j].low <= bars[j+1].low && bars[j].low <= bars[j+2].low) {
+        prevLowIdx = j;
+        break;
+      }
+    }
+
+    if (prevLowIdx !== -1 && rsi14[prevLowIdx] !== null) {
+      const pricePrevLow = bars[prevLowIdx].close;
+      const rsiPrevLow = rsi14[prevLowIdx];
+      if (priceToday < pricePrevLow && rsiToday > rsiPrevLow && rsiToday < 45) {
+        isRsiBullDiv = true;
+      }
+    }
+
+    let prevHighIdx = -1;
+    for (let j = currentIndex - 5; j >= currentIndex - 25; j--) {
+      if (j >= 2 && bars[j].high >= bars[j-1].high && bars[j].high >= bars[j-2].high &&
+          bars[j].high >= bars[j+1].high && bars[j].high >= bars[j+2].high) {
+        prevHighIdx = j;
+        break;
+      }
+    }
+
+    if (prevHighIdx !== -1 && rsi14[prevHighIdx] !== null) {
+      const pricePrevHigh = bars[prevHighIdx].close;
+      const rsiPrevHigh = rsi14[prevHighIdx];
+      if (priceToday > pricePrevHigh && rsiToday < rsiPrevHigh && rsiToday > 55) {
+        isRsiBearDiv = true;
+      }
+    }
+  }
+
+  // ── Inside Day & NR7 ──
+  const isInsideDay = currentIndex > 0 &&
+    bars[currentIndex].high < bars[currentIndex - 1].high &&
+    bars[currentIndex].low > bars[currentIndex - 1].low;
+
+  let isNR7 = false;
+  if (currentIndex >= 6) {
+    const getRange = (idx) => bars[idx].high - bars[idx].low;
+    const todayRange = getRange(currentIndex);
+    let smallest = true;
+    for (let j = 1; j <= 6; j++) {
+      if (getRange(currentIndex - j) <= todayRange) {
+        smallest = false;
+        break;
+      }
+    }
+    isNR7 = smallest;
+  }
+
+  // ── Weekly Trend (Weekly 10-SMA) ──
+  const getWeeklyCloses = (dailyBars, limitIndex) => {
+    const weeklyCloses = [];
+    for (let i = 0; i <= limitIndex; i++) {
+      const b = dailyBars[i];
+      const dateObj = new Date(b.time);
+      const nextB = dailyBars[i+1];
+      const isLastDayOfWeek = !nextB || i === limitIndex ||
+        new Date(nextB.time).getDay() < dateObj.getDay() ||
+        (new Date(nextB.time) - dateObj) > 4 * 24 * 60 * 60 * 1000;
+
+      if (isLastDayOfWeek) {
+        weeklyCloses.push(b.close);
+      }
+    }
+    return weeklyCloses;
+  };
+
+  const weeklyCloses = getWeeklyCloses(bars, currentIndex);
+  let isWeeklyBull = false;
+  let weeklySMA10Val = null;
+  if (weeklyCloses.length >= 10) {
+    let sum = 0;
+    for (let j = 0; j < 10; j++) {
+      sum += weeklyCloses[weeklyCloses.length - 1 - j];
+    }
+    weeklySMA10Val = sum / 10;
+    isWeeklyBull = weeklyCloses[weeklyCloses.length - 1] > weeklySMA10Val;
+  }
+
+  // ── Minervini Weighted Relative Strength (RS) ──
+  let rsPercentile = null;
+  let rsScore = null;
+  let rawWeightedRs = null;
+
+  if (window.BENCHMARK_DATA && window.BENCHMARK_DATA.length > 0) {
+    const benchmark = window.BENCHMARK_DATA;
+
+    const getReturnPct = (pricesArr, days, refTime) => {
+      const idx = pricesArr.findIndex(p => p.time === refTime);
+      if (idx < 0) return 0.0;
+      const startIdx = Math.max(0, idx - days);
+      const currentClose = pricesArr[idx].close;
+      const pastClose = pricesArr[startIdx].close;
+      if (pastClose <= 0) return 0.0;
+      return ((currentClose - pastClose) / pastClose) * 100;
+    };
+
+    const refTime = bars[currentIndex].time;
+    const stockIdx = bars.findIndex(p => p.time === refTime);
+    const benchIdx = benchmark.findIndex(p => p.time === refTime);
+
+    if (stockIdx >= 30 && benchIdx >= 30) {
+      const stock_63 = getReturnPct(bars, 63, refTime);
+      const bench_63 = getReturnPct(benchmark, 63, refTime);
+      const r_63 = stock_63 - bench_63;
+
+      const stock_126 = getReturnPct(bars, 126, refTime);
+      const bench_126 = getReturnPct(benchmark, 126, refTime);
+      const r_126 = stock_126 - bench_126;
+
+      const stock_189 = getReturnPct(bars, 189, refTime);
+      const bench_189 = getReturnPct(benchmark, 189, refTime);
+      const r_189 = stock_189 - bench_189;
+
+      const stock_252 = getReturnPct(bars, 252, refTime);
+      const bench_252 = getReturnPct(benchmark, 252, refTime);
+      const r_252 = stock_252 - bench_252;
+
+      rawWeightedRs = 0.40 * r_63 + 0.20 * r_126 + 0.20 * r_189 + 0.20 * r_252;
+
+      const score_rs_map = (val) => {
+        if (val >= 50) return [100, 99];
+        if (val >= 30) return [95, 95];
+        if (val >= 20) return [90, 90];
+        if (val >= 10) return [80, 80];
+        if (val >= 5) return [70, 70];
+        if (val >= 0) return [60, 60];
+        if (val >= -5) return [50, 50];
+        if (val >= -10) return [40, 40];
+        if (val >= -20) return [20, 25];
+        return [0, 10];
+      };
+
+      const [sc, pct] = score_rs_map(rawWeightedRs);
+      rsScore = sc;
+      rsPercentile = pct;
+    }
+  }
+
+  // ── Day-of-Week Bias ──
+  let dayOfWeekBias = null;
+  if (currentIndex >= 5) {
+    const todayDate = new Date(bars[currentIndex].time);
+    const targetDay = todayDate.getDay();
+    const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    const dayName = dayNames[targetDay];
+
+    let sameDayCount = 0;
+    let sameDayWins = 0;
+    let sameDayReturnSum = 0;
+
+    for (let i = 1; i <= currentIndex; i++) {
+      const barDate = new Date(bars[i].time);
+      if (barDate.getDay() === targetDay) {
+        sameDayCount++;
+        const prevClose = bars[i-1].close;
+        const currentClose = bars[i].close;
+        const ret = prevClose > 0 ? (currentClose - prevClose) / prevClose * 100 : 0;
+        sameDayReturnSum += ret;
+        if (ret > 0) {
+          sameDayWins++;
+        }
+      }
+    }
+
+    if (sameDayCount > 0) {
+      dayOfWeekBias = {
+        day: dayName,
+        winRate: (sameDayWins / sameDayCount * 100).toFixed(1),
+        avgReturn: (sameDayReturnSum / sameDayCount).toFixed(2),
+        count: sameDayCount
+      };
     }
   }
 
@@ -603,7 +866,28 @@ function calculatePatternStats(bars, currentIndex) {
     regime: {
       isAbove: isAboveSMA200,
       stats: buildForwardStatsObj(isAboveSMA200 ? aboveSMA200Returns : belowSMA200Returns)
-    }
+    },
+    insideDay: isInsideDay,
+    nr7: isNR7,
+    rsi: rsi14[currentIndex] !== null ? rsi14[currentIndex].toFixed(1) : null,
+    rsiDivergence: {
+      isBull: isRsiBullDiv,
+      isBear: isRsiBearDiv
+    },
+    atr: atr14[currentIndex] ? {
+      val: atr14[currentIndex],
+      pct: (atr14[currentIndex] / bars[currentIndex].close * 100).toFixed(2)
+    } : null,
+    weeklyTrend: {
+      isWeeklyBull: isWeeklyBull,
+      weeklySMA10: weeklySMA10Val
+    },
+    rs: rawWeightedRs !== null ? {
+      percentile: rsPercentile,
+      score: rsScore,
+      raw: rawWeightedRs.toFixed(2)
+    } : null,
+    dayBias: dayOfWeekBias
   };
 }
 
@@ -615,15 +899,16 @@ function setupChartLegend(chart, container, symbol, prices, candleSeries) {
   legend.style.top = '12px';
   legend.style.zIndex = 10;
   legend.style.fontFamily = "'JetBrains Mono', monospace";
-  legend.style.fontSize = '12px';
+  legend.style.fontSize = '11px';
   legend.style.color = 'var(--text)';
-  legend.style.background = 'rgba(13, 17, 23, 0.85)';
+  legend.style.background = 'rgba(13, 17, 23, 0.9)';
   legend.style.padding = '8px 12px';
-  legend.style.borderRadius = '6px';
+  legend.style.borderRadius = '8px';
   legend.style.pointerEvents = 'none';
   legend.style.border = '1px solid var(--border)';
-  legend.style.boxShadow = '0 4px 6px rgba(0,0,0,0.3)';
-  legend.style.minWidth = '240px';
+  legend.style.boxShadow = '0 6px 16px rgba(0,0,0,0.4)';
+  legend.style.minWidth = '280px';
+  legend.style.maxWidth = '360px';
 
   container.appendChild(legend);
 
@@ -633,92 +918,352 @@ function setupChartLegend(chart, container, symbol, prices, candleSeries) {
     return `<span style="color:${col}">${s[n].winRate}% (${s[n].avg}%)</span>`;
   };
 
+  const SECTOR_ETF_MAP = {
+    "Technology": "XLK",
+    "Financial Services": "XLF",
+    "Financials": "XLF",
+    "Healthcare": "XLV",
+    "Consumer Cyclical": "XLY",
+    "Consumer Discretionary": "XLY",
+    "Industrials": "XLI",
+    "Communication Services": "XLC",
+    "Consumer Defensive": "XLP",
+    "Consumer Staples": "XLP",
+    "Energy": "XLE",
+    "Utilities": "XLU",
+    "Real Estate": "XLRE",
+    "Basic Materials": "XLB",
+    "Materials": "XLB"
+  };
+
+  let currentActiveBar = prices[prices.length - 1];
+
+  // Metadata lazy loading
+  if (container.dataset.symbol !== symbol) {
+    container.dataset.symbol = symbol;
+    container.chartMetadata = {
+      earnings: null,
+      sectorName: null,
+      sectorETF: null,
+      sectorHistory: null
+    };
+
+    // 1. Fetch earnings data
+    fetch(`/api/earnings/${symbol}`)
+      .then(res => res.ok ? res.json() : null)
+      .then(metaData => {
+        if (metaData && container.dataset.symbol === symbol) {
+          container.chartMetadata.earnings = metaData;
+          if (currentActiveBar) setLegendContent(currentActiveBar);
+        }
+      })
+      .catch(err => console.error("Error fetching earnings:", err));
+
+    // 2. Resolve Sector & fetch ETF
+    const STOCK_SECTOR_FALLBACKS = {
+      "AAPL": "Technology", "MSFT": "Technology", "NVDA": "Technology", "AMD": "Technology",
+      "AVGO": "Technology", "LRCX": "Technology", "AMAT": "Technology", "INTC": "Technology",
+      "FFIV": "Technology", "DELL": "Technology", "CSCO": "Technology", "ANET": "Technology",
+      "JBL": "Technology", "APH": "Technology", "VRT": "Technology", "ADI": "Technology",
+      "TXN": "Technology", "MU": "Technology",
+      "JNJ": "Healthcare", "INCY": "Healthcare", "BIIB": "Healthcare", "MRNA": "Healthcare",
+      "MRK": "Healthcare", "CVS": "Healthcare", "UNH": "Healthcare", "HUM": "Healthcare",
+      "LLY": "Healthcare", "DVA": "Healthcare", "WELL": "Healthcare", "CNC": "Healthcare",
+      "IRM": "Real Estate", "EQIX": "Real Estate", "XLRE": "Real Estate",
+      "FIX": "Industrials", "JBHT": "Industrials", "ODFL": "Industrials", "FDX": "Industrials",
+      "CAT": "Industrials", "GE": "Industrials", "HON": "Industrials", "CSX": "Industrials",
+      "TPR": "Consumer Cyclical", "RL": "Consumer Cyclical", "TGT": "Consumer Cyclical",
+      "ROST": "Consumer Cyclical", "MGM": "Consumer Cyclical",
+      "TRGP": "Energy", "VLO": "Energy", "MPC": "Energy",
+      "C": "Financials", "BEN": "Financials", "BNY": "Financials", "IBKR": "Financials", "MS": "Financials",
+      "GL": "Financials", "STT": "Financials", "CFG": "Financials",
+      "GOOGL": "Communication Services", "GOOG": "Communication Services"
+    };
+
+    const stockInfo = findStockInRawData(symbol);
+    let sector = null;
+    if (stockInfo) {
+      sector = (stockInfo.sector && stockInfo.sector !== 'Unknown') ? stockInfo.sector : (STOCK_SECTOR_FALLBACKS[symbol] || null);
+    } else {
+      sector = STOCK_SECTOR_FALLBACKS[symbol] || null;
+    }
+
+    if (sector) {
+      container.chartMetadata.sectorName = sector;
+      const etf = SECTOR_ETF_MAP[sector];
+      if (etf && currentMarket === 'US') {
+        container.chartMetadata.sectorETF = etf;
+        fetch(`/api/history/${etf}`)
+          .then(res => res.ok ? res.json() : null)
+          .then(hist => {
+            if (hist && container.dataset.symbol === symbol) {
+              container.chartMetadata.sectorHistory = hist;
+              if (currentActiveBar) setLegendContent(currentActiveBar);
+            }
+          })
+          .catch(err => console.error("Error fetching sector ETF:", err));
+      }
+    }
+  }
+
   const setLegendContent = (priceData) => {
     if (!priceData) {
       legend.innerHTML = `<strong>${symbol}</strong><br>Hover over chart for details`;
       return;
     }
 
+    currentActiveBar = priceData;
     const currentIndex = prices.findIndex(p => p.time === priceData.time);
     const stats = currentIndex >= 0 ? calculatePatternStats(prices, currentIndex) : null;
+    const meta = container.chartMetadata || {};
 
     const color = priceData.close >= priceData.open ? 'var(--green)' : 'var(--red)';
-    let statsHtml = `<div style="font-size:11px; color:var(--muted); line-height:1.4">`;
-    statsHtml += `<div style="color:#c9d1d9;margin-bottom:4px;border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:2px">📊 <strong>Dynamic Pattern Stats (Next Day)</strong></div>`;
+    const barClose = priceData.close;
+    const barVol = prices[currentIndex] ? (prices[currentIndex].value || prices[currentIndex].volume || 0) : 0;
 
+    // Earnings warning overlay
+    let earningsHtml = "";
+    if (meta.earnings && meta.earnings.date) {
+      const daysTo = meta.earnings.days_to_earnings;
+      if (daysTo !== null && daysTo >= 0 && daysTo <= 7) {
+        earningsHtml = `<div style="background:rgba(244,67,54,0.15);color:#f44336;padding:4px 6px;border-radius:4px;margin-bottom:6px;font-weight:bold;text-align:center;border:1px solid rgba(244,67,54,0.3)">
+          ⚠️ Earnings in ${daysTo} days (${meta.earnings.date})
+        </div>`;
+      } else if (daysTo !== null && daysTo >= 0) {
+        earningsHtml = `<div style="color:var(--muted);margin-bottom:4px">📅 Earnings: ${meta.earnings.date} (in ${daysTo} days)</div>`;
+      }
+    }
+
+    // Sector display
+    let sectorHtml = "";
+    if (meta.sectorName) {
+      if (currentMarket === 'US') {
+        let sectorRSStr = `<span style="color:var(--muted)">Loading...</span>`;
+        if (meta.sectorETF && meta.sectorHistory && meta.sectorHistory.length > 0 && window.BENCHMARK_DATA) {
+          const secStats = calculatePatternStats(meta.sectorHistory, meta.sectorHistory.length - 1);
+          if (secStats && secStats.rs) {
+            const secColor = secStats.rs.percentile >= 70 ? 'var(--green)' : (secStats.rs.percentile < 40 ? 'var(--red)' : '#ff9800');
+            sectorRSStr = `<span style="color:${secColor};font-weight:bold">RS ${secStats.rs.percentile}</span>`;
+          }
+        }
+        sectorHtml = `<div style="color:var(--cyan);margin-bottom:6px;display:flex;justify-content:space-between">
+          <span>Sector: ${meta.sectorName} (${meta.sectorETF || '—'})</span>
+          <span>${sectorRSStr}</span>
+        </div>`;
+      } else if (currentMarket === 'TH' && RAW_DATA && RAW_DATA.thai_sector_heatmap) {
+        const sectors = RAW_DATA.thai_sector_heatmap.sectors || [];
+        const targetSec = sectors.find(s => (s.sector || '').toLowerCase() === (meta.sectorName || '').toLowerCase());
+        if (targetSec) {
+          const score = targetSec.momentum_score || 0;
+          const secColor = score >= 60 ? 'var(--green)' : (score < 40 ? 'var(--red)' : '#ff9800');
+          sectorHtml = `<div style="color:var(--cyan);margin-bottom:6px;display:flex;justify-content:space-between">
+            <span>Sector: ${meta.sectorName}</span>
+            <span style="color:${secColor};font-weight:bold">Score ${score.toFixed(1)}</span>
+          </div>`;
+        } else {
+          sectorHtml = `<div style="color:var(--cyan);margin-bottom:6px">Sector: ${meta.sectorName}</div>`;
+        }
+      }
+    }
+
+    // Calculations UI
+    let accuracyHtml = "";
+    let patternsHtml = "";
     if (stats) {
-      const renderRecent = (label, icon, statsObj, periods, color='var(--text)') => {
-        let html = `<div style="margin-bottom:6px"><div style="color:${color}">${icon} ${label}</div>`;
+      // 1. Inside Day / NR7 badges
+      let badges = [];
+      if (stats.insideDay) badges.push(`<span style="background:rgba(88,166,255,0.15);color:#58a6ff;padding:2px 4px;border-radius:3px;font-weight:bold;font-size:9px">INSIDE</span>`);
+      if (stats.nr7) badges.push(`<span style="background:rgba(210,168,255,0.15);color:#d2a8ff;padding:2px 4px;border-radius:3px;font-weight:bold;font-size:9px">NR7</span>`);
+      let badgeRow = badges.length > 0 ? `<div style="display:flex;gap:4px;margin-bottom:6px">${badges.join("")}</div>` : "";
+
+      // 2. ATR Position Size
+      let atrStr = "N/A";
+      let posSizeStr = "N/A";
+      if (stats.atr) {
+        atrStr = `${stats.atr.val.toFixed(2)} (${stats.atr.pct}%)`;
+        const settings = getSettings();
+        const acct = parseFloat(settings.account_size) || 50000;
+        const risk = parseFloat(settings.risk_pct) || 0.5;
+        const riskAmt = acct * (risk / 100);
+        const stopDistance = 2 * stats.atr.val;
+        const shares = Math.floor(riskAmt / stopDistance);
+        if (shares > 0 && barClose > 0) {
+          const allocation = (shares * barClose) / acct * 100;
+          const currencySign = currentMarket === 'TH' ? '฿' : '$';
+          posSizeStr = `${shares} shares (${allocation.toFixed(1)}% / ${currencySign}${(shares * barClose).toLocaleString(undefined, {maximumFractionDigits:0})})`;
+        }
+      }
+
+      // 3. Weekly trend
+      const weeklyColor = stats.weeklyTrend.isWeeklyBull ? 'var(--green)' : 'var(--red)';
+      const weeklyStr = `<span style="color:${weeklyColor};font-weight:bold">${stats.weeklyTrend.isWeeklyBull ? 'Bullish 📈' : 'Bearish 📉'}</span>`;
+
+      // 4. RSI & Divergence
+      let rsiDivergenceStr = "";
+      if (stats.rsiDivergence.isBull) {
+        rsiDivergenceStr = ` <span style="background:rgba(46,164,79,0.2);color:var(--green);padding:1px 3px;border-radius:2px;font-size:9px">BULL DIV</span>`;
+      } else if (stats.rsiDivergence.isBear) {
+        rsiDivergenceStr = ` <span style="background:rgba(207,34,46,0.2);color:var(--red);padding:1px 3px;border-radius:2px;font-size:9px">BEAR DIV</span>`;
+      }
+      const rsiColor = (stats.rsi >= 70) ? 'var(--red)' : (stats.rsi <= 30 ? 'var(--green)' : 'var(--text)');
+      const rsiStr = stats.rsi ? `<span style="color:${rsiColor}">${stats.rsi}</span>${rsiDivergenceStr}` : "N/A";
+
+      // 5. RS rating
+      let rsStr = "N/A";
+      if (stats.rs) {
+        const rsColor = stats.rs.percentile >= 80 ? 'var(--green)' : (stats.rs.percentile < 50 ? 'var(--red)' : '#ff9800');
+        rsStr = `<span style="color:${rsColor};font-weight:bold">Percentile ${stats.rs.percentile} (${stats.rs.raw}%)</span>`;
+      }
+
+      // 6. Day bias
+      let dayBiasStr = "N/A";
+      if (stats.dayBias) {
+        const biasColor = parseFloat(stats.dayBias.avgReturn) >= 0 ? 'var(--green)' : 'var(--red)';
+        dayBiasStr = `${stats.dayBias.day}: <span style="color:${biasColor}">${stats.dayBias.winRate}% (Avg ${stats.dayBias.avgReturn}%)</span>`;
+      }
+
+      // 7. Confluence Score
+      let bullCount = 0;
+      let bearCount = 0;
+      if (stats.gap.streak > 0 && stats.gap.dir === 1) bullCount++;
+      if (stats.gap.streak > 0 && stats.gap.dir === -1) bearCount++;
+      if (stats.color.streak > 0 && stats.color.dir === 1) bullCount++;
+      if (stats.color.streak > 0 && stats.color.dir === -1) bearCount++;
+      if (stats.pullback) bullCount++;
+      if (stats.breakout) bullCount++;
+      if (stats.volumeSpike && priceData.close > priceData.open) bullCount++;
+      if (stats.volumeDryUp) bullCount++;
+      if (stats.hammer) bullCount++;
+      if (stats.strongClose) bullCount++;
+      if (stats.wideRangeBull) bullCount++;
+      if (stats.wideRangeBear) bearCount++;
+      if (stats.insideDay) bullCount++;
+      if (stats.nr7) bullCount++;
+      if (stats.weeklyTrend.isWeeklyBull) bullCount++;
+      if (stats.rsiDivergence.isBull) bullCount++;
+      if (stats.rsiDivergence.isBear) bearCount++;
+      if (stats.regime.isAbove) bullCount++;
+      else bearCount++;
+
+      const netScore = bullCount - bearCount;
+      let confluenceText = "Neutral";
+      let confluenceColor = 'var(--text)';
+      if (netScore >= 4) {
+        confluenceText = "Strong Bullish 🐂";
+        confluenceColor = 'var(--green)';
+      } else if (netScore >= 1) {
+        confluenceText = "Bullish";
+        confluenceColor = 'var(--green)';
+      } else if (netScore <= -4) {
+        confluenceText = "Strong Bearish 🐻";
+        confluenceColor = 'var(--red)';
+      } else if (netScore <= -1) {
+        confluenceText = "Bearish";
+        confluenceColor = 'var(--red)';
+      }
+
+      const confluenceScoreHtml = `<div style="border-top:1px solid rgba(255,255,255,0.15);margin-top:6px;padding-top:6px;display:flex;justify-content:space-between;font-weight:bold">
+        <span>Confluence Score:</span>
+        <span style="color:${confluenceColor}">${bullCount}B - ${bearCount}S (Net: ${netScore > 0 ? '+' : ''}${netScore})</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;color:var(--muted);font-size:10px;margin-bottom:6px">
+        <span>Bias assessment:</span>
+        <span style="color:${confluenceColor}">${confluenceText}</span>
+      </div>`;
+
+      accuracyHtml = `
+        <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:6px;padding:6px;margin-bottom:8px">
+          ${badgeRow}
+          <div style="display:flex;justify-content:space-between"><span>ATR (14):</span> <span>${atrStr}</span></div>
+          <div style="display:flex;justify-content:space-between"><span>Rec. Size (2 ATR):</span> <span style="color:var(--gold)">${posSizeStr}</span></div>
+          <div style="display:flex;justify-content:space-between"><span>Weekly Trend:</span> <span>${weeklyStr}</span></div>
+          <div style="display:flex;justify-content:space-between"><span>RSI (14):</span> <span>${rsiStr}</span></div>
+          <div style="display:flex;justify-content:space-between"><span>Relative Strength:</span> <span>${rsStr}</span></div>
+          <div style="display:flex;justify-content:space-between"><span>Day Bias:</span> <span>${dayBiasStr}</span></div>
+          ${confluenceScoreHtml}
+        </div>
+      `;
+
+      let activePatternsList = "";
+      const renderRecent = (label, icon, statsObj, periods, col='var(--text)') => {
+        let html = `<div style="margin-bottom:4px"><div style="color:${col}">${icon} ${label}</div>`;
         periods.forEach(p => {
-          html += `<div style="display:flex;justify-content:space-between"><span>${p === 'all' ? 'All Time' : 'Last ' + p + ' times'}:</span> ${formatStat(statsObj, p)}</div>`;
+          html += `<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted)"><span>· ${p === 'all' ? 'All Time' : 'Last ' + p + ' times'}:</span> ${formatStat(statsObj, p)}</div>`;
         });
         html += `</div>`;
         return html;
       };
 
-      const renderForward = (label, icon, statsObj, color='var(--text)') => {
-        let html = `<div style="margin-bottom:6px"><div style="color:${color}">${icon} ${label}</div>`;
+      const renderForward = (label, icon, statsObj, col='var(--text)') => {
+        let html = `<div style="margin-bottom:4px"><div style="color:${col}">${icon} ${label}</div>`;
         const periods = Object.keys(statsObj).sort((a,b) => parseInt(a) - parseInt(b));
         periods.forEach(p => {
-          html += `<div style="display:flex;justify-content:space-between"><span>Hold ${p} Days:</span> ${formatStat(statsObj, p)}</div>`;
+          html += `<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted)"><span>· Hold ${p} Days:</span> ${formatStat(statsObj, p)}</div>`;
         });
         html += `</div>`;
         return html;
       };
 
-      if (stats.regime) {
-        const rName = stats.regime.isAbove ? 'Bullish (Above SMA200)' : 'Bearish (Below SMA200)';
-        const rCol = stats.regime.isAbove ? 'var(--green)' : 'var(--red)';
-        statsHtml += renderForward(`Regime: ${rName}`, stats.regime.isAbove ? '🐂' : '🐻', stats.regime.stats, rCol);
-      }
       if (stats.gap.streak > 0) {
         const gName = stats.gap.dir === 1 ? 'Gap Up' : 'Gap Down';
         const gCol = stats.gap.dir === 1 ? 'var(--green)' : 'var(--red)';
-        statsHtml += renderRecent(`${gName} (${stats.gap.streak} days)`, stats.gap.dir === 1 ? '📈' : '📉', stats.gap.stats, [10, 20, 'all'], gCol);
+        activePatternsList += renderRecent(`${gName} (${stats.gap.streak} days)`, stats.gap.dir === 1 ? '📈' : '📉', stats.gap.stats, [10, 20, 'all'], gCol);
       }
       if (stats.color.streak > 0) {
         const cName = stats.color.dir === 1 ? 'Green Bar' : 'Red Bar';
         const cCol = stats.color.dir === 1 ? 'var(--green)' : 'var(--red)';
-        statsHtml += renderRecent(`${cName} (${stats.color.streak} days)`, stats.color.dir === 1 ? '🟩' : '🟥', stats.color.stats, [5, 10, 'all'], cCol);
+        activePatternsList += renderRecent(`${cName} (${stats.color.streak} days)`, stats.color.dir === 1 ? '🟩' : '🟥', stats.color.stats, [5, 10, 'all'], cCol);
       }
       if (stats.pullback) {
-        statsHtml += renderForward(`SMA50 Pullback Bounce`, '↩️', stats.pullback.stats, '#ff9800');
+        activePatternsList += renderForward(`SMA50 Pullback Bounce`, '↩️', stats.pullback.stats, '#ff9800');
       }
       if (stats.breakout) {
-        statsHtml += renderForward(`20-Day Breakout`, '🚀', stats.breakout.stats, 'var(--green)');
+        activePatternsList += renderForward(`20-Day Breakout`, '🚀', stats.breakout.stats, 'var(--green)');
       }
       if (stats.volumeSpike) {
-        statsHtml += renderForward(`Volume Climax (>2x)`, '📊', stats.volumeSpike.stats, '#58a6ff');
+        activePatternsList += renderForward(`Volume Climax (>2x)`, '📊', stats.volumeSpike.stats, '#58a6ff');
       }
       if (stats.volumeDryUp) {
-        statsHtml += renderForward(`Volume Dry-Up (<0.5x)`, '🏜️', stats.volumeDryUp.stats, '#a3a3a3');
+        activePatternsList += renderForward(`Volume Dry-Up (<0.5x)`, '🏜️', stats.volumeDryUp.stats, '#a3a3a3');
       }
       if (stats.hammer) {
-        statsHtml += renderForward(`Rejection Tail (Pin Bar)`, '🔨', stats.hammer.stats, '#ffeb3b');
+        activePatternsList += renderForward(`Rejection Tail (Pin Bar)`, '🔨', stats.hammer.stats, '#ffeb3b');
       }
       if (stats.strongClose) {
-        statsHtml += renderForward(`Strong Close (Top 25% + Vol)`, '💪', stats.strongClose.stats, 'var(--green)');
+        activePatternsList += renderForward(`Strong Close (Top 25% + Vol)`, '💪', stats.strongClose.stats, 'var(--green)');
       }
       if (stats.wideRangeBull) {
-        statsHtml += renderForward(`Wide Range Bullish (>1.5x)`, '📏📈', stats.wideRangeBull.stats, '#d2a8ff');
+        activePatternsList += renderForward(`Wide Range Bullish (>1.5x)`, '📏📈', stats.wideRangeBull.stats, '#d2a8ff');
       }
       if (stats.wideRangeBear) {
-        statsHtml += renderForward(`Wide Range Bearish (>1.5x)`, '📏📉', stats.wideRangeBear.stats, '#ff7b72');
+        activePatternsList += renderForward(`Wide Range Bearish (>1.5x)`, '📏📉', stats.wideRangeBear.stats, '#ff7b72');
+      }
+
+      if (activePatternsList) {
+        patternsHtml = `
+          <div style="border-top:1px solid rgba(255,255,255,0.15);padding-top:6px;margin-top:6px">
+            <div style="color:#c9d1d9;margin-bottom:4px;font-weight:bold">🧩 Active Pattern Stats</div>
+            ${activePatternsList}
+          </div>
+        `;
       }
     } else {
-      statsHtml += `<div style="margin-top:4px">Not enough data</div>`;
+      accuracyHtml = `<div style="margin-top:4px">Not enough data</div>`;
     }
-    statsHtml += `</div>`;
 
     legend.innerHTML = `
-      <div style="font-weight:bold;font-size:14px;margin-bottom:6px;">${symbol} <span style="font-size:11px;color:var(--muted);font-weight:normal;margin-left:4px">${priceData.time}</span></div>
-      <div style="display:flex;gap:8px;margin-bottom:8px;border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:6px">
+      ${earningsHtml}
+      <div style="font-weight:bold;font-size:13px;margin-bottom:2px;">${symbol} <span style="font-size:10px;color:var(--muted);font-weight:normal;margin-left:4px">${priceData.time}</span></div>
+      ${sectorHtml}
+      <div style="display:flex;gap:6px;margin-bottom:8px;border-bottom:1px solid rgba(255,255,255,0.15);padding-bottom:6px;font-size:10px;color:var(--muted)">
         <span>O: <span style="color:${color}">${priceData.open.toFixed(2)}</span></span>
         <span>H: <span style="color:${color}">${priceData.high.toFixed(2)}</span></span>
         <span>L: <span style="color:${color}">${priceData.low.toFixed(2)}</span></span>
         <span>C: <span style="color:${color}">${priceData.close.toFixed(2)}</span></span>
+        <span>Vol: <span style="color:${color}">${(barVol >= 1e6 ? (barVol/1e6).toFixed(1) + 'M' : (barVol/1e3).toFixed(0) + 'K')}</span></span>
       </div>
-      ${statsHtml}
+      ${accuracyHtml}
+      ${patternsHtml}
     `;
   };
 
@@ -807,7 +1352,7 @@ async function initFavChart(symbol) {
     addLine(calcSMA(closes, 150), '#2196f3', 'SMA150');
     addLine(calcSMA(closes, 200), '#9c27b0', 'SMA200');
 
-    setupChartLegend(chart, container, symbol, prices, candleSeries);
+    setupChartLegend(chart, container, symbol, data, candleSeries);
     chart.timeScale().fitContent();
   } catch (err) {
     container.innerHTML = `<span style="color:var(--red)">❌ โหลดกราฟไม่สำเร็จสำหรับ ${symbol}</span>`;
@@ -1034,6 +1579,9 @@ async function setMarket(m) {
   if (accountLabel) {
     accountLabel.textContent = m === 'TH' ? 'Account Size (฿)' : 'Account Size ($)';
   }
+
+  // Pre-fetch benchmark data for the market
+  await fetchBenchmarkData(m);
 
   await refreshHistoryList();
   await loadData();
@@ -3075,6 +3623,10 @@ window.onload = async () => {
   const activeBtn = document.getElementById('mkt-' + currentMarket);
   if (activeBtn) activeBtn.classList.add('active');
   initTradingGuide();
+
+  // Pre-fetch benchmark data for the market
+  await fetchBenchmarkData(currentMarket);
+
   await refreshHistoryList();
   await loadData();
   await paperRefresh();

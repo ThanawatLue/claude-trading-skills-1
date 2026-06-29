@@ -1189,6 +1189,70 @@ def api_history(symbol):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/earnings/<symbol>")
+def api_earnings(symbol):
+    try:
+        sys.path.insert(0, os.path.join(BASE_DIR, "scripts"))
+        from cache_manager import CacheManager
+
+        cache = CacheManager(DB_PATH)
+
+        # Check local sqlite cache first (TTL 24 hours)
+        is_cached, cached_res = cache.get_earnings_scan(symbol, ttl_hours=24.0)
+        if is_cached:
+            if cached_res:
+                try:
+                    from datetime import date
+
+                    earn_date = date.fromisoformat(cached_res["date"])
+                    days_to = (earn_date - date.today()).days
+                    cached_res["days_to_earnings"] = days_to
+                except Exception:
+                    cached_res["days_to_earnings"] = None
+                return jsonify(cached_res)
+            return jsonify({"symbol": symbol, "date": None, "days_to_earnings": None})
+
+        # Fetch dynamically from yfinance
+        earnings_date = None
+        try:
+            import yfinance as yf
+
+            ticker = yf.Ticker(symbol)
+            cal = ticker.calendar
+            if cal:
+                key = next((k for k in cal.keys() if k.lower() == "earnings date"), None)
+                if key:
+                    dates = cal[key]
+                    if dates and len(dates) > 0:
+                        d = dates[0]
+                        if hasattr(d, "strftime"):
+                            earnings_date = d.strftime("%Y-%m-%d")
+                        else:
+                            earnings_date = str(d)
+        except Exception as err:
+            print(f"Failed to fetch earnings for {symbol} via yfinance: {err}", file=sys.stderr)
+
+        # Save to cache
+        res_dict = None
+        days_to_earnings = None
+        if earnings_date:
+            res_dict = {"symbol": symbol, "date": earnings_date, "time": "unknown"}
+            try:
+                from datetime import date
+
+                earn_date = date.fromisoformat(earnings_date)
+                days_to_earnings = (earn_date - date.today()).days
+            except Exception:
+                pass
+
+        cache.save_earnings_scan(symbol, res_dict)
+        return jsonify(
+            {"symbol": symbol, "date": earnings_date, "days_to_earnings": days_to_earnings}
+        )
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/db/stats")
 def api_db_stats():
     """Return DB stats: run counts, date ranges per market."""

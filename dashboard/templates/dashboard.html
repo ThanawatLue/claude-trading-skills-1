@@ -225,57 +225,62 @@
               </td>
             </tr>
             <tr>
-              <td><strong style="color: var(--purple);">RS Rank (Relative Strength)</strong></td>
-              <td style="color: var(--text); font-size: 0.78rem;">คะแนนความแข็งแกร่งของราคาหุ้นตัวนั้นเปรียบเทียบกับหุ้นทั้งหมดในตลาด (1-99)</td>
+              <td><strong style="color: var(--purple);">RS (Relative Strength vs. Market)</strong></td>
+              <td style="color: var(--text); font-size: 0.78rem;">คะแนนเปรียบเทียบความแข็งแกร่งของราคาหุ้นตัวนั้นกับดัชนีอ้างอิงของตลาด (SPY / SET Index) โดยคำนวณแบบ Minervini Weighted (3m, 6m, 9m, 12m) แปลงเป็นเปอร์เซ็นไทล์ 1-99</td>
               <td style="color: var(--muted); font-size: 0.78rem;">
-                <strong style="color: var(--green);">≥80 (Market Leader)</strong>: หุ้นผู้นำตลาดที่วิ่งแรงกว่าดัชนี มีแรงดันซื้อมากที่สุด เมื่อตลาดร่วงหุ้นกลุ่มนี้จะลงน้อยที่สุด
+                <strong style="color: var(--green);">Percentile ≥80 (ผู้นำตลาด/Market Leader)</strong>: หุ้นแข็งกว่าดัชนีตลาดชัดเจน เหมาะซื้อช่วงตลาดปรับตัวลง เพราะจะฟื้นตัวได้เร็วกว่าหุ้นทั่วไป
               </td>
             </tr>
             <tr>
-              <td><strong style="color: var(--gold);">Pivot Price (🏆)</strong></td>
-              <td style="color: var(--text); font-size: 0.78rem;">ราคาที่เป็นแนวต้านสุดท้ายก่อนที่แรงบีบตัวสะสมพลัง (VCP) จะระเบิดออก</td>
+              <td><strong style="color: var(--cyan);">Confluence Score</strong></td>
+              <td style="color: var(--text); font-size: 0.78rem;">คะแนนรวมสัญญาณเชิงเทคนิคทุกตัวที่แอคทีฟอยู่ (เช่น แท่งเขียวติดกัน, ย่อเส้น 50 วัน, เบรกเอาท์, RSI Divergence) โดยหาทิศทางสุทธิ (Bullish vs Bearish)</td>
               <td style="color: var(--muted); font-size: 0.78rem;">
-                ใช้เป็น <strong style="color: var(--cyan);">จุดเข้าซื้อ (Entry Point)</strong> โดยปกติจะตั้งเงื่อนไขซื้ออัตโนมัติเมื่อราคาวิ่งผ่านจุดนี้ขึ้นไป (Pivot + 1 ช่อง)
+                <strong style="color: var(--green);">Net ≥ +4 (Strong Bullish 🐂)</strong>: สัญญาณกระทิงหนาแน่นมาก มีโอกาสเข้าซื้อสำเร็จสูง<br>
+                <strong style="color: var(--red);">Net ≤ -4 (Strong Bearish 🐻)</strong>: สัญญาณหมีหนาแน่นมาก หลีกเลี่ยงหรือชะลอการซื้อ
               </td>
             </tr>
             <tr>
-              <td><strong style="color: var(--red);">Stop Loss Price (🔴)</strong></td>
-              <td style="color: var(--text); font-size: 0.78rem;">จุดแนวรับสำคัญทางเทคนิคเพื่อป้องกันความเสียหายใหญ่หลวงหากคาดการณ์ผิดทาง</td>
+              <td><strong style="color: var(--orange);">ATR & Position Sizer</strong></td>
+              <td style="color: var(--text); font-size: 0.78rem;">ค่าผันผวน Average True Range (14 วัน) แสดงเป็นสัดส่วน % เทียบราคาปิด พร้อมระบบคำนวณขนาดไม้เทรด (Stop Loss 2 ATR) อิงตามความเสี่ยงที่ระบุในแผนการเงิน</td>
               <td style="color: var(--muted); font-size: 0.78rem;">
-                <strong style="color: var(--red);">สำคัญที่สุด!</strong> ต้องขายทันทีเมื่อชนจุดนี้ เพื่อรักษาวินัยในการปกป้องเงินทุนหลักไม่ให้เสียหายหนัก
+                ใช้คุมความเสี่ยงรายตัวโดยซื้อหุ้นจำนวนตามที่แนะนำ (เช่น *127 หุ้น*) เพื่อให้ขาดทุนสูงสุดไม่เกินค่าจำกัดความเสี่ยง (เช่น 0.5% ของพอร์ต)
               </td>
             </tr>
             <tr>
-              <td><strong style="color: var(--green);">Target Price (🎯)</strong></td>
-              <td style="color: var(--text); font-size: 0.78rem;">เป้าราคาทำกำไรตามอัตราส่วนความเสี่ยง (Risk/Reward)</td>
+              <td><strong style="color: var(--cyan);">RSI & Divergence</strong></td>
+              <td style="color: var(--text); font-size: 0.78rem;">ดัชนีความแข็งแกร่งสัมพัทธ์ (RSI 14 วัน) และระบบสแกนความขัดแย้งของราคาเทียบ RSI ในรอบ 30 วันเพื่อระบุจุดกลับตัว</td>
               <td style="color: var(--muted); font-size: 0.78rem;">
-                เป้าทำกำไรขั้นต่ำ <strong style="color: var(--green);">2R (กำไร 2 เท่าของผลขาดทุนที่เสี่ยง)</strong> เพื่อสร้างแต้มต่อให้พอร์ตก้าวหน้าในระยะยาว
+                <strong style="color: var(--green);">BULL DIV</strong>: ราคาทำจุดต่ำสุดใหม่ แต่ RSI ยกโลว์ (โอกาสเด้งกลับสูง)<br>
+                <strong style="color: var(--red);">BEAR DIV</strong>: ราคาทำจุดสูงสุดใหม่ แต่ RSI ลดไฮ (โอกาสกลับตัวเป็นขาลงสูง)
               </td>
             </tr>
             <tr>
-              <td><strong style="color: var(--orange);">ATR (Average True Range)</strong></td>
-              <td style="color: var(--text); font-size: 0.78rem;">ค่าความผันผวนของราคาหุ้นเฉลี่ยต่อวัน (แสดงเป็นราคาปกติและเปอร์เซ็นต์เทียบราคาหุ้น)</td>
+              <td><strong style="color: var(--cyan);">Sector RS / Heatmap Score</strong></td>
+              <td style="color: var(--text); font-size: 0.78rem;">ระดับความแข็งแกร่งของกลุ่มอุตสาหกรรม (US: RS Percentile ของ Sector ETF เทียบตลาด, TH: คะแนนโมเมนตัมจาก Heatmap เซกเตอร์)</td>
               <td style="color: var(--muted); font-size: 0.78rem;">
-                <strong style="color: var(--green);">ATR% ต่ำ (&lt;3-4%)</strong>: ผันผวนต่ำ ราคาบีบตัวได้ดีเยี่ยม เหมาะวาง Stop Loss ชิดและคุมความเสี่ยงง่าย
+                ช่วยตรวจสอบว่าหุ้นอยู่ในกลุ่มอุตสาหกรรมที่เงินทุนกำลังไหลเข้าหรือไม่ หลีกเลี่ยงอุตสาหกรรมที่เป็น Laggard (คะแนนหรือ RS ต่ำ)
               </td>
             </tr>
             <tr>
-              <td><strong style="color: var(--cyan);">Dynamic Pattern Stats</strong><br><span style="font-size:0.65rem; color:var(--muted);">(Gap, Color, Breakout, etc.)</span></td>
-              <td style="color: var(--text); font-size: 0.78rem;">สถิติแบบ <strong>Context-Aware</strong> (รู้ใจ) จะสแกนแท่งเทียนปัจจุบันว่าเข้าเงื่อนไขแพทเทิร์นใด (เช่น เบรคเอาท์, วอลุ่มเข้า, ย่อแตะเส้น 50 วัน) แล้วคำนวณ <strong>Win Rate</strong> ถ้ายอมถือข้ามวัน</td>
+              <td><strong style="color: var(--purple);">Weekly Trend & Day Bias</strong></td>
+              <td style="color: var(--text); font-size: 0.78rem;"><strong>Weekly Trend</strong>: แนวโน้มราคารายสัปดาห์เทียบกับเส้น 10-week SMA<br><strong>Day Bias</strong>: สถิติอัตราการชนะและผลตอบแทนย้อนหลังเฉพาะวันนั้นในสัปดาห์ (เช่น วันศุกร์)</td>
+              <td style="color: var(--muted); font-size: 0.78rem;">
+                ใช้คัดกรองทิศทางใหญ่ (ควรซื้อเฉพาะหุ้นที่ Weekly Trend เป็น Bullish 📈) และใช้วางแผนการห่อหุ้นข้ามวันตามพฤติกรรมแต่ละวันของหุ้นตัวนั้น
+              </td>
+            </tr>
+            <tr>
+              <td><strong style="color: var(--gold);">Pivot & Stop Loss Price (🔴/🏆)</strong></td>
+              <td style="color: var(--text); font-size: 0.78rem;"><strong>Pivot Price</strong>: แนวต้านสุดท้ายจุดเริ่มแรงเบรกเอาท์ของราคา<br><strong>Stop Loss</strong>: แนวรับสำคัญเพื่อจำกัดการขาดทุนและปกป้องเงินต้น</td>
+              <td style="color: var(--muted); font-size: 0.78rem;">
+                เข้าซื้อเมื่อราคาวิ่งผ่านจุด Pivot ขึ้นไป และตัดขาดทุนทันทีหากผิดทางแล้วราคาตกลงมาชน Stop Loss อย่างไม่มีข้อยกเว้น
+              </td>
+            </tr>
+            <tr>
+              <td><strong style="color: var(--cyan);">Context-Aware Pattern Stats</strong><br><span style="font-size:0.65rem; color:var(--muted);">(Gap, Color, Breakout, etc.)</span></td>
+              <td style="color: var(--text); font-size: 0.78rem;">สถิติแบบระบุเงื่อนไขแท่งเทียนปัจจุบันว่าอยู่ในทรงใด (เช่น เบรคเอาท์ ย่อแตะเส้น 50 วัน หรือเกิด Pin Bar) แล้ววิเคราะห์ประวัติในอดีตเพื่อหา Win Rate และเฉลี่ยกำไรขาดทุน</td>
               <td style="color: var(--muted); font-size: 0.78rem;">
                 <strong style="color: var(--green);">Win Rate สูง (&gt;60%) + Average กำไร</strong>: โอกาสชนะสูง ให้ <strong>ถือข้ามวัน (Hold/Buy ATC)</strong><br>
                 <strong style="color: var(--red);">Win Rate ต่ำ หรือ Average ขาดทุน</strong>: แนวโน้มไม่ดี ให้ <strong>ชิงขายทำกำไรตอนตลาดปิด หรือ ชะลอการซื้อ</strong>
-              </td>
-            </tr>
-            <tr>
-              <td><strong style="color: var(--cyan);">New Dynamic Stats</strong><br><span style="font-size:0.65rem; color:var(--muted);">(Hammer, Strong Close, Wide Range, Friday)</span></td>
-              <td style="color: var(--text); font-size: 0.78rem;">แพทเทิร์นพฤติกรรมราคาใหม่ 4 แบบที่เพิ่มเข้ามา:<br>
-              <strong>1. Rejection Tail (Pin Bar):</strong> ไส้เทียนด้านล่างยาวกว่าตัวเทียน 2 เท่า (แรงซื้อกลับสู้ชัดเจน)<br>
-              <strong>2. Strong Close:</strong> ปิดบวกใน 10% บนของกรอบราคา (แรงซื้อชนะขาด)<br>
-              <strong>3. Wide Range Bar:</strong> กรอบราคากว้างกว่าค่าเฉลี่ย 10 วันเกิน 1.5 เท่า (ความผันผวนสูงมาก)<br>
-              <strong>4. Friday Effect:</strong> สถิติพฤติกรรมที่เกิดเฉพาะ "วันศุกร์" (ลดความเสี่ยงห่อข้ามเสาร์-อาทิตย์)</td>
-              <td style="color: var(--muted); font-size: 0.78rem;">
-                ใช้หลักการอ่าน <strong style="color: var(--green);">Win Rate</strong> เหมือนเดิม เพื่อประกอบการตัดสินใจว่าแต่ละพฤติกรรมนี้ในอดีต <strong style="color: var(--orange);">"เคยให้ผลตอบแทนดีแค่ไหนในช่วง 3, 5, 10 วันถัดไป"</strong>
               </td>
             </tr>
           </tbody>
