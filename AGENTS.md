@@ -935,11 +935,39 @@ This is a **public repository**. Never hardcode personal information:
 
 Files that contain secrets (`.mcp.json`, `.envrc`) must be listed in `.gitignore` and never committed.
 
-### Stock Recommendation & Analysis Workflow
+### Stock Recommendation & Analysis Workflow (Dual-Check Analysis Protocol)
 
-When the user requests stock suggestions or analysis from the dashboard:
-- You must perform a comprehensive evaluation of BOTH the chart/pattern techniques (VCP structure, breakouts, etc.) and ALL the detailed statistics (Confluence Score, Day Bias, Relative Strength Rank, and Pattern Stats).
-- Never recommend a stock based solely on VCP proximity or trend status without cross-checking its stats (e.g. making sure it is not a Laggard with a low RS rank, or checking if the current day has a highly unfavorable Day Bias).
+Whenever the user requests stock suggestions or analysis from the dashboard, you MUST execute the following **Dual-Check Analysis Protocol** to combine all technical indicators and quantitative statistics. Never make recommendations based solely on chart setups (VCP/Breakout) or solely on raw stats; they must confirm each other.
+
+#### 1. Large-Scale Technical Trend & Structure Check
+*   **VCP & Breakout State**: Check the stock's consolidation state (`Pre-breakout`, `Early-post-breakout`, `Extended`, `Pullback`, or `Damaged`).
+*   **Pivot Proximity**: Calculate the exact percentage distance to the pivot price. Prefer stocks that are near their pivot (-2% to +3%) or pulling back to key support levels. Avoid `Extended` (>5%) or `Overextended` (>10%) setups.
+*   **Stage 2 Trend Template**: Verify that the stock passes the Minervini Trend Template (e.g., price above 150-SMA and 200-SMA, 200-SMA sloping up).
+
+#### 2. Relative Strength (RS) Screening (Rejecting Laggards)
+*   **RS Rank & RS Percentile**: Look up the Minervini Weighted RS Percentile. Only recommend stocks that are **Market Leaders** (RS Percentile ≥ 80).
+*   **Avoid Laggards**: Strictly reject any stock labeled as a `Laggard` (RS Percentile < 70) even if its VCP pattern looks perfect.
+
+#### 3. Time-Specific Day Bias Analysis (Overnight vs. Intraday)
+You must tailor the Day-of-Week Bias analysis specifically to the user's intended holding period:
+*   **Type A: Overnight / Swing (Buy 16:00 ➔ Sell/Hold 10:00)**
+    *   **Metric to check**: Close-to-Close or Close-to-Open Day Bias (the standard Day Bias shown on the Dashboard).
+    *   **Criteria**: The day of purchase (or the next morning) must have a historical win rate > 55% and positive average return.
+*   **Type B: Intraday Day Trade (Buy 10:00 ➔ Sell/Hold 16:00)**
+    *   **Metric to check**: Intraday Open-to-Close Day Bias (calculated as `(Close - Open) / Open`).
+    *   **Criteria**: The purchase day must have a historical Intraday Win Rate > 50% and positive average return. Reject stocks with negative intraday drift on that day of the week (e.g., stocks that frequently open high and fade).
+
+#### 4. Confluence Score & Active Pattern Statistics
+*   **Confluence Score**: Ensure the stock has a positive net Confluence Score (e.g., Net +2 Bullish). It must represent alignment among multiple tech indicator signals (RSI, moving averages, volume).
+*   **Pattern-Specific Win Rate**: Look up the active patterns (e.g., `Gap Up`, `Red Bar`, `Hammer`, `Volume Dry Up`) and check their historical win rate for the selected holding period.
+
+#### 5. Risk Management & Position Sizing
+*   **ATR-Based Sizing**: Check the ATR (Average True Range) and its percentage relative to price (`ATR%`). Use the position sizing helper to calculate the exact shares to recommend based on the user's account size and risk tolerance (default 1.0% risk).
+*   **Stop Loss Location**: Always specify the exact stop-loss level (typically below the recent swing low or cheat area).
+
+#### 6. Earnings Safeguard (Avoid Catalyst Risk)
+*   Check the upcoming earnings release date. **NEVER** recommend buying/holding a stock overnight if its earnings date is within 7 days, to avoid catastrophic overnight gaps.
+
 
 ## Language Considerations
 
