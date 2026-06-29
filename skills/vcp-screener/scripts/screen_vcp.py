@@ -533,12 +533,13 @@ def main():
     print()
 
     # Initialize data client
-    # Use YFClient (yfinance) by default — no API key required.
-    # Fall back to FMPClient only when --api-key is explicitly provided.
+    # Use FMPClient if FMP_API_KEY is available (in arguments or environment).
+    # Otherwise, fall back to YFClient (yfinance).
+    api_key = args.api_key or os.environ.get("FMP_API_KEY")
     try:
-        if args.api_key:
-            client = FMPClient(api_key=args.api_key)
-            print("FMP API client initialized (using provided key)")
+        if api_key:
+            client = FMPClient(api_key=api_key)
+            print("FMP API client initialized")
         else:
             client = YFClient()
             print("Yahoo Finance client initialized (no API key required)")

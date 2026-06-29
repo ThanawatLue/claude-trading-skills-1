@@ -156,7 +156,37 @@ def latest_file(pattern: str, market: str = "US") -> str | None:
                 data = json.load(j)
                 if isinstance(data, list):
                     return f if market == "US" else None
-                if data.get("metadata", {}).get("market", "US") == market:
+                
+                # Extract market from metadata
+                meta = data.get("metadata", {})
+                m = meta.get("market")
+                
+                # Fallback 1: canslim screening_options
+                if not m:
+                    m = meta.get("screening_options", {}).get("market")
+                
+                # Fallback 2: breakout_plan input_metadata or symbol suffix
+                if not m:
+                    input_meta = data.get("input_metadata", {})
+                    src_file = input_meta.get("source_file", "")
+                    if "vcp_screener_" in src_file:
+                        has_th = False
+                        for k in ["actionable_orders", "rejected", "watchlist"]:
+                            if data.get(k):
+                                for item in data[k]:
+                                    sym = item.get("symbol", "")
+                                    if sym.endswith(".BK"):
+                                        has_th = True
+                                        break
+                        m = "TH" if has_th else "US"
+                    else:
+                        m = input_meta.get("market")
+                
+                # Default to US if not resolved
+                if not m:
+                    m = "US"
+                
+                if m.upper() == market.upper():
                     return f
         except Exception:
             continue
@@ -201,11 +231,11 @@ def _collect_snapshot(market: str) -> dict:
     )
     earnings_trade = load_json(latest_file_any(os.path.join(REPORTS_DIR, "earnings_trade_*.json")))
     breakout_plan = load_json(
-        latest_file_any(os.path.join(REPORTS_DIR, "breakout_trade_plan_*.json"))
+        latest_file(os.path.join(REPORTS_DIR, "breakout_trade_plan_*.json"), market)
     )
     uptrend = load_json(latest_file_any(os.path.join(REPORTS_DIR, "uptrend_analysis_*.json")))
     downtrend = load_json(latest_file_any(os.path.join(REPORTS_DIR, "downtrend_analysis_*.json")))
-    canslim = load_json(latest_file_any(os.path.join(REPORTS_DIR, "canslim_screener_*.json")))
+    canslim = load_json(latest_file(os.path.join(REPORTS_DIR, "canslim_screener_*.json"), market))
     thai_swing = load_json(latest_file_any(os.path.join(REPORTS_DIR, "thai_swing_*.json")))
     # NEW: TV-powered Thai skills
     thai_sector_heatmap = load_json(
@@ -496,7 +526,7 @@ def api_run():
                 "--top",
                 "100",
             ],
-            300,
+            600,
             None,
         ),
         # 3. Uptrend Analyzer
@@ -550,7 +580,7 @@ def api_run():
                 "--output-dir",
                 REPORTS_DIR,
             ],
-            300,
+            600,
             None,
         )
     )
