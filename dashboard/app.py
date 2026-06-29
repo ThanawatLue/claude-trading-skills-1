@@ -10,6 +10,20 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+# Load environment variables from .env manually
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+env_path = os.path.join(BASE_DIR, ".env")
+if os.path.exists(env_path):
+    with open(env_path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if "=" in line:
+                key, val = line.split("=", 1)
+                val = val.strip().strip("'").strip('"')
+                os.environ[key.strip()] = val
+
 import hf_sync
 import yfinance as yf
 from flask import Flask, Response, jsonify, render_template, request
