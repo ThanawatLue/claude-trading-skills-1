@@ -315,7 +315,9 @@ For **Above Average stocks (60-69 points)**:
 
 ### Step 6: Generate User-Facing Report
 
-Create a concise, actionable summary for the user:
+Create a concise, actionable summary for the user. ALWAYS format the report beautifully using GitHub-flavored Markdown. Use bolding for key metrics, add emojis for quick scanning, and present it clearly to the user.
+
+> **⚠️ CRITICAL CONSTRAINT:** You are an analyst, not an execution engine. Do NOT attempt to execute live trades or connect to brokerage APIs to buy these stocks. All position sizing and buy recommendations are strictly for "Paper Trading" or analytical discussion purposes only.
 
 **Report Format:**
 

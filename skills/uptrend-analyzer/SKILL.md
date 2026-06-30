@@ -48,11 +48,16 @@ The script will:
 
 ### Phase 2: Present Results
 
-Present the generated Markdown report to the user, highlighting:
+Present the generated Markdown report to the user, ensuring the output is beautifully formatted using GitHub-flavored Markdown. Use clear bullet points and emojis for quick scannability.
+
+Highlight:
 - Composite score and zone classification
 - Exposure guidance (Full/Normal/Reduced/Defensive/Preservation)
-- Sector heatmap showing strongest and weakest sectors
+- Sector heatmap showing strongest and weakest sectors (delineate Cyclical vs Defensive clearly)
 - Key momentum and rotation signals
+
+**Crucial Fallback Handling:**
+If the script fails to download the CSV data from Monty's GitHub, explicitly warn the user that the data is unavailable and the analysis cannot be completed.
 
 ---
 

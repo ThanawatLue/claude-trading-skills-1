@@ -1149,7 +1149,7 @@ High dividend growth stocks (12%+ CAGR) compound wealth through rising dividends
 """
 
     # Write report
-    with open(output_path, "w") as f:
+    with open(output_path, "w", encoding="utf-8") as f:
         f.write(report)
 
     print(f"✅ Markdown report saved: {output_path}", file=sys.stderr)

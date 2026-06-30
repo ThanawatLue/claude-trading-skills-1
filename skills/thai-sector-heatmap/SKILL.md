@@ -7,6 +7,16 @@ description: Generate a sector-rotation heatmap for the Thai SET market using Tr
 
 This skill produces a daily sector-rotation snapshot for the Thai SET market.
 
+> [!CAUTION]
+> **CRITICAL CONSTRAINT: NO LIVE TRADING**
+> This skill is for **analytical purposes ONLY**. You are strictly forbidden from attempting to connect to broker APIs (e.g., Alpaca, Interactive Brokers) or executing live trades. All insights, momentum scores, and stock lists are for informational and "Paper Trading" use only.
+
+## Formatting Guidelines
+When presenting the heatmap or sector data to the user via chat:
+- Use **Emojis** to indicate momentum (e.g., 🟢 Hot, 🟡 Neutral, 🔴 Cold/Weak).
+- Use **Markdown Tables** or bolding for readability.
+- Clearly separate leading sectors from lagging sectors.
+
 ## When to Use
 
 - Daily morning routine to identify which SET sectors are leading vs lagging.

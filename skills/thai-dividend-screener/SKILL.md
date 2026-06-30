@@ -7,6 +7,16 @@ description: Screen Thai SET stocks for high-quality dividend income opportuniti
 
 A pure-TradingView dividend screener for the Thai SET market — produces a ranked list of income candidates with both high yield AND uptrend confirmation.
 
+> [!CAUTION]
+> **CRITICAL CONSTRAINT: NO LIVE TRADING**
+> This skill is for **analytical purposes ONLY**. You are strictly forbidden from executing live trades. All screened stocks and yield data are for information and portfolio planning.
+
+## Formatting Guidelines
+When presenting dividend candidates to the user:
+- Use **Emojis** (e.g., 💸 Yield, 📈 Trend, ⚠️ Value Trap).
+- Format the output as a Markdown table or clear bulleted list containing Ticker, Yield, P/E, and Grade.
+- Bold the tickers and grades for easy scanning.
+
 ## When to Use
 
 - Build / rebalance a Thai dividend portfolio (income focus).

@@ -166,16 +166,20 @@ class FMPClient:
             if response.status_code == 200:
                 self.retry_count = 0
                 return response.json()
-            elif response.status_code == 429:
+            elif response.status_code in (401, 403, 429):
                 self.retry_count += 1
-                if self.retry_count <= self.max_retries:
-                    print("WARNING: Rate limit exceeded. Waiting 60 seconds...", file=sys.stderr)
-                    time.sleep(60)
-                    return self._rate_limited_get(url, params, quiet=quiet)
+                if response.status_code == 429:
+                    msg = "ERROR: Daily API rate limit reached (429)."
                 else:
-                    print("ERROR: Daily API rate limit reached.", file=sys.stderr)
-                    self.rate_limit_reached = True
-                    return None
+                    msg = f"ERROR: API request failed: {response.status_code} - {response.text[:200]}"
+                
+                if self.retry_count <= self.max_retries and response.status_code == 429:
+                    print(msg, file=sys.stderr)
+                else:
+                    print(msg, file=sys.stderr)
+                    
+                self.rate_limit_reached = True
+                return None
             else:
                 if not quiet:
                     print(
@@ -300,6 +304,34 @@ class FMPClient:
         if data:
             self.cache[cache_key] = data
         return data
+
+    def get_thai_constituents(self, index: str = "SET50") -> Optional[list[dict]]:
+        """Fetch Thai constituents (SET50/SET100) via TradingView."""
+        try:
+            from lib.tv_client import get_thai_set50, get_thai_set100, is_available
+            if is_available():
+                if index == "SET100":
+                    stocks = get_thai_set100(limit=100)
+                else:
+                    stocks = get_thai_set50(limit=50)
+                
+                if stocks:
+                    constituents = [
+                        {
+                            "symbol": f"{s['name']}.BK",
+                            "name": s['name'],
+                            "sector": s.get("sector", index),
+                            "subSector": s.get("industry", "Thai Stock")
+                        }
+                        for s in stocks
+                    ]
+                    print(f"  (Thai {index} via TradingView: {len(constituents)} stocks)", flush=True)
+                    return constituents
+            return None
+        except Exception as e:
+            import sys
+            print(f"WARNING: TradingView Thai fallback error: {e}", file=sys.stderr)
+            return None
 
     def _get_sp500_from_wikipedia(self) -> Optional[list[dict]]:
         """Scrape S&P 500 constituents from Wikipedia as a free fallback.

@@ -93,6 +93,10 @@ For each actionable order, explain:
 - Two execution modes: pre_place (stop-limit) vs post_confirm (limit after 5min confirmation)
 - Portfolio risk contribution and cumulative heat
 
+> **⚠️ CRITICAL CONSTRAINT:** The generated Alpaca order templates are for pre-placement review and analytical purposes ONLY. You MUST NOT attempt to connect to any broker API or execute these trades live.
+
+**Formatting Guidelines:** Present the explanation beautifully using GitHub-flavored Markdown. Use checkboxes or bullet points for the entry/stop/target levels so the user can easily read and manually execute them if they choose.
+
 ---
 
 ## 6. Resources

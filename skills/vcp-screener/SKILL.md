@@ -58,6 +58,7 @@ python3 skills/vcp-screener/scripts/screen_vcp.py \
   --output-dir reports/
 ```
 
+**Screener Parameters Reference:**
 | Parameter | Default | Range | Effect |
 |-----------|---------|-------|--------|
 | `--min-contractions` | 2 | 2-4 | Higher = fewer but higher-quality patterns |
@@ -104,6 +105,8 @@ For each top candidate, present:
 - **Good VCP (70-79):** Buy on volume confirmation above pivot (0.75x)
 - **Developing (60-69):** Add to watchlist, wait for tighter contraction
 - **Weak/No VCP (<60):** Monitor only or skip
+
+> **⚠️ CRITICAL CONSTRAINT:** You are an analyst, not an execution engine. Do NOT attempt to execute live trades or connect to brokerage APIs to buy these stocks. All position sizing and buy recommendations are strictly for "Paper Trading" or analytical discussion purposes only.
 
 ## 3-Phase Pipeline
 

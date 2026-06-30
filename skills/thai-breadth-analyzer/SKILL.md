@@ -7,6 +7,16 @@ description: Compute fast market-breadth snapshot for the Thai SET market via Tr
 
 A Thai-market analogue of the US market-breadth-analyzer, but using TradingView's pre-computed indicators instead of looping yfinance — completes in seconds vs minutes.
 
+> [!CAUTION]
+> **CRITICAL CONSTRAINT: NO LIVE TRADING**
+> This skill is for **analytical purposes ONLY**. You are strictly forbidden from attempting to execute live trades based on market breadth data. All regime classifications are for informational use only.
+
+## Formatting Guidelines
+When presenting breadth data to the user:
+- Use **Emojis** for market regimes (e.g., 🟢 Strong Bull, 🔴 Bear).
+- Clearly state the **Actionable Advice** (e.g., "Increase Risk", "Selectivity Required", "Capital Preservation") in bold.
+- Present metrics (%>SMA50, A/D line) using clean markdown lists.
+
 ## When to Use
 
 - Daily morning routine to assess overall SET market health.

@@ -63,10 +63,12 @@ python3 skills/market-breadth-analyzer/scripts/market_breadth_analyzer.py --mark
 
 ### Phase 2: Present Results
 
-Present the generated Markdown report to the user, highlighting:
+Present the generated Markdown report to the user, ensuring the output is beautifully formatted using GitHub-flavored Markdown. Use bolding for key terms, use color indicators or emojis (e.g., 🟢 Strong, 🔴 Critical) for health zones, and explicitly state the recommended equity exposure.
+
+Highlight:
 - Composite score and health zone
 - Strongest and weakest components
-- Recommended equity exposure level
+- Recommended equity exposure level (Actionable Advice - clearly state if the user should increase or decrease risk)
 - Key breadth levels to watch
 
 ---

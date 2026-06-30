@@ -215,7 +215,7 @@ class YFClient:
         if need_scan:
             print(
                 f"  Scanning {len(need_scan)} stocks for earnings "
-                f"{from_date} → {to_date} ({_EARNINGS_WORKERS} workers)...",
+                f"{from_date} -> {to_date} ({_EARNINGS_WORKERS} workers)...",
                 flush=True,
             )
         else:

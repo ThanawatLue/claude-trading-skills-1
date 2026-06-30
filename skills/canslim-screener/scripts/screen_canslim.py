@@ -404,7 +404,14 @@ def main():
     else:
         try:
             client = FMPClient(api_key=args.api_key)
-            print("✓ FMP API client initialized")
+            # test if API key is exhausted
+            client.get_quote("^GSPC")
+            if getattr(client, "rate_limit_reached", False):
+                print("⚠️  FMP API rate limit reached. Falling back to Yahoo Finance.", file=sys.stderr)
+                client = YFClient()
+                use_yfinance = True
+            else:
+                print("✓ FMP API client initialized")
         except ValueError as e:
             if _YF_AVAILABLE:
                 print(f"⚠️  FMP unavailable ({e}), falling back to Yahoo Finance", file=sys.stderr)

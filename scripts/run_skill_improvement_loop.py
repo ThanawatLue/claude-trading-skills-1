@@ -191,7 +191,7 @@ def run_llm_review(project_root: Path, skill_name: str, prompt_file: str) -> dic
     # but we force JSON mode in gemini_adapter.
     response_text = gemini_adapter.call_gemini(
         prompt_text,
-        model_name="gemini-2.0-flash",
+        model_name=os.environ.get("GEMINI_MODEL", "gemini-2.0-flash"),
         response_mime_type="application/json"
     )
     
@@ -316,7 +316,8 @@ def apply_improvement(
         + "2. Keep entry points self-contained. If you need constants or helper functions, define them directly in the same file or use absolute imports after appending paths to `sys.path` if absolutely necessary."
     )
 
-    success = gemini_adapter.run_gemini_agent(prompt, model_name="gemini-2.0-flash", max_turns=30)
+    model_name = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
+    success = gemini_adapter.run_gemini_agent(prompt, model_name=model_name, max_turns=30)
     if not success:
         logger.error("Gemini improvement agent failed.")
         return None

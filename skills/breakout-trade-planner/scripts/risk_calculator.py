@@ -106,7 +106,7 @@ SIZING_MULTIPLIER: dict[str, float] = {
     "textbook": 1.75,
     "strong": 1.0,
     "good": 0.75,
-    "developing": 0.0,
+    "developing": 0.25,
     "weak": 0.0,
 }
 

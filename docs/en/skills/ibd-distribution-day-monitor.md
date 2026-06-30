@@ -43,7 +43,7 @@ Invoke this skill:
 - As an upstream input to FTD (Follow-Through Day) detection or other market-state frameworks.
 
 Do NOT use this skill to:
-- Execute trades or modify orders.
+- Execute trades or modify orders. (The TQQQ/QQQ exposure recommendations are analytical advice ONLY).
 - Generate discretionary market predictions outside of the IBD ruleset.
 
 ---

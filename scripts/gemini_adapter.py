@@ -88,7 +88,7 @@ def _call_generate_content_with_retry(
 
 def call_gemini(
     prompt: str,
-    model_name: str = "gemini-2.0-flash",
+    model_name: str = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash"),
     temperature: float = 0.2,
     max_output_tokens: int = 8192,
     response_mime_type: str = "text/plain",
@@ -114,6 +114,11 @@ def call_gemini(
             cmd.extend(["-m", model_name])
             
         try:
+            import time
+            # Respect Free Tier RPM (15 RPM = 4 seconds per request)
+            logger.info("Sleeping 4.5 seconds to respect Free Tier API rate limits...")
+            time.sleep(4.5)
+            
             logger.info("Calling gemini CLI for prompt...")
             env = os.environ.copy()
             for k in list(env.keys()):
@@ -287,6 +292,11 @@ def run_gemini_agent(
             cmd.extend(["-m", model_name])
             
         try:
+            import time
+            # Respect Free Tier RPM (15 RPM = 4 seconds per request)
+            logger.info("Sleeping 4.5 seconds to respect Free Tier API rate limits in agent mode...")
+            time.sleep(4.5)
+            
             logger.info("Spawning gemini CLI in YOLO mode...")
             env = os.environ.copy()
             for k in list(env.keys()):

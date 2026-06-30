@@ -16,7 +16,7 @@ Invoke this skill:
 - As an upstream input to FTD (Follow-Through Day) detection or other market-state frameworks.
 
 Do NOT use this skill to:
-- Execute trades or modify orders.
+- Execute trades or modify orders. (The TQQQ/QQQ exposure recommendations are analytical advice ONLY).
 - Generate discretionary market predictions outside of the IBD ruleset.
 
 ## Inputs
@@ -75,6 +75,8 @@ QQQ uses a less aggressive policy (HIGH=75%, SEVERE=50%) since it lacks 3x lever
 Saved to `reports/` (or `--output-dir`):
 - `ibd_distribution_day_monitor_YYYY-MM-DD_HHMMSS.json`
 - `ibd_distribution_day_monitor_YYYY-MM-DD_HHMMSS.md`
+
+When presenting the results to the user in chat, format the output beautifully using GitHub-flavored Markdown. Use bolding for key terms and use warning emojis (⚠️) when the risk classification is HIGH or SEVERE.
 
 JSON is UTF-8 with `ensure_ascii=False` (Japanese explanations preserved). Sensitive keys (`api_key`, `fmp_api_key`, `token`, etc.) are redacted automatically.
 

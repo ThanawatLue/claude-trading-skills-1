@@ -47,7 +47,17 @@ Exposure Coach synthesizes outputs from market-breadth-analyzer, uptrend-analyze
 ## 3. Prerequisites
 
 - Python 3.9+
-- FMP API key (set `FMP_API_KEY` environment variable) for institutional-flow-tracker data
+- FMP API key (set `FMP_API_KEY` environment variable) for institutional-flow-tracker data. Example:
+  ```bash
+  # Linux/macOS
+  export FMP_API_KEY="your_fmp_api_key_here"
+
+  # Windows (PowerShell)
+  $env:FMP_API_KEY="your_fmp_api_key_here"
+
+  # Windows (CMD)
+  set FMP_API_KEY=your_fmp_api_key_here
+  ```
 - Input JSON files from upstream skills (see Workflow Step 1)
 - Standard library + `argparse`, `json`, `datetime`
 
@@ -105,6 +115,13 @@ python3 skills/exposure-coach/scripts/calculate_exposure.py \
 ```
 
 The script accepts partial inputs; missing files reduce confidence but do not block execution.
+
+**Crucial Fallback Handling:**
+If any upstream JSON files are completely missing (e.g., failed to generate), you MUST:
+1. Note the missing inputs in the `inputs_missing` field of the JSON report.
+2. Downgrade the overall `confidence` score (e.g., from HIGH to MEDIUM or LOW).
+3. Default to a more conservative `exposure_ceiling_pct` to prioritize safety.
+4. Explicitly warn the user in the Markdown report about which signals were absent.
 
 ### Step 3: Interpret the Market Posture Summary
 

@@ -70,6 +70,13 @@ python3 skills/exposure-coach/scripts/calculate_exposure.py \
 
 The script accepts partial inputs; missing files reduce confidence but do not block execution.
 
+**Crucial Fallback Handling:**
+If any upstream JSON files are completely missing (e.g., failed to generate), you MUST:
+1. Note the missing inputs in the `inputs_missing` field of the JSON report.
+2. Downgrade the overall `confidence` score (e.g., from HIGH to MEDIUM or LOW).
+3. Default to a more conservative `exposure_ceiling_pct` to prioritize safety.
+4. Explicitly warn the user in the Markdown report about which signals were absent.
+
 ### Step 3: Interpret the Market Posture Summary
 
 Review the generated posture report containing:
@@ -121,7 +128,7 @@ Map the posture recommendation to portfolio actions:
 
 ### Markdown Report
 
-The markdown report provides a one-page summary suitable for quick review:
+The markdown report provides a one-page summary suitable for quick review. **When presenting to the user in chat**, ALWAYS format the output beautifully using GitHub-flavored Markdown. Use bolding for key terms, use emojis sparingly for status, and ensure the rationale is crisp and bulleted for scannability.
 
 ```markdown
 # Market Posture Summary

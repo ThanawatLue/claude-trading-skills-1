@@ -179,7 +179,7 @@ def process_candidate(
     if execution_state == "Pre-breakout":
         plan_eligible = (
             valid_vcp
-            and rating_band in ("textbook", "strong", "good")
+            and rating_band in ("textbook", "strong", "good", "developing")
             and risk_pct_worst <= MAX_RISK_PCT
         )
 
@@ -190,7 +190,7 @@ def process_candidate(
             reasons = []
             if not valid_vcp:
                 reasons.append("valid_vcp=False")
-            if rating_band not in ("textbook", "strong", "good"):
+            if rating_band not in ("textbook", "strong", "good", "developing"):
                 reasons.append(f"rating_band={rating_band}")
             if risk_pct_worst > MAX_RISK_PCT:
                 reasons.append(f"risk_pct_worst={risk_pct_worst}%>{MAX_RISK_PCT}%")
@@ -222,7 +222,7 @@ def process_candidate(
 
         plan_eligible = (
             valid_vcp
-            and rating_band in ("textbook", "strong", "good")
+            and rating_band in ("textbook", "strong", "good", "developing")
             and risk_pct_worst <= MAX_RISK_PCT
             and breakout_volume
             and distance <= args.max_chase_pct
@@ -412,13 +412,24 @@ def _reject(symbol: str, reason: str) -> dict:
     }
 
 
+def _get_risk_adjusted_score(result: dict) -> float:
+    vcp = result.get("vcp_pattern") or {}
+    pivot = vcp.get("pivot_price") or 1.0
+    contractions = vcp.get("contractions") or []
+    last_low = contractions[-1].get("low_price") if contractions else pivot * 0.95
+    worst_entry = pivot * 1.02
+    stop_loss = (last_low or pivot * 0.95) * 0.99
+    risk_pct = (worst_entry - stop_loss) / worst_entry * 100 if worst_entry > 0 else 10.0
+    return result.get("composite_score", 0) - 0.5 * risk_pct
+
+
 def generate_plans(data: dict, args: argparse.Namespace) -> dict:
     """Main pipeline: filter, score, size, classify all candidates."""
     exposure = load_exposure(args.current_exposure_json)
     results = data["results"]
 
-    # Sort by composite_score descending (highest priority first)
-    results_sorted = sorted(results, key=lambda r: r.get("composite_score", 0), reverse=True)
+    # Sort by risk-adjusted score descending (highest priority first)
+    results_sorted = sorted(results, key=_get_risk_adjusted_score, reverse=True)
 
     actionable = []
     revalidation = []

@@ -539,7 +539,13 @@ def main():
     try:
         if api_key:
             client = FMPClient(api_key=api_key)
-            print("FMP API client initialized")
+            # test if API key is exhausted
+            client.get_sp500_constituents()
+            if getattr(client, "rate_limit_reached", False):
+                print("WARNING: FMP API rate limit reached. Falling back to Yahoo Finance.", file=sys.stderr)
+                client = YFClient()
+            else:
+                print("FMP API client initialized")
         else:
             client = YFClient()
             print("Yahoo Finance client initialized (no API key required)")

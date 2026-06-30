@@ -137,8 +137,8 @@ class TestGetSizingMultiplier:
     def test_good_075(self):
         assert get_sizing_multiplier("good") == 0.75
 
-    def test_developing_zero(self):
-        assert get_sizing_multiplier("developing") == 0.0
+    def test_developing_pilot(self):
+        assert get_sizing_multiplier("developing") == 0.25
 
     def test_unknown_zero(self):
         assert get_sizing_multiplier("unknown") == 0.0

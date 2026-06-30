@@ -184,17 +184,19 @@ class FMPClient:
                 self.retry_count = 0  # Reset on success
                 return response.json()
 
-            elif response.status_code == 429:
-                # Rate limit exceeded
+            elif response.status_code in (401, 403, 429):
                 self.retry_count += 1
-                if self.retry_count <= self.max_retries:
-                    print("WARNING: Rate limit exceeded. Waiting 60 seconds...", file=sys.stderr)
-                    time.sleep(60)
-                    return self._rate_limited_get(url, params, quiet=quiet)
+                if response.status_code == 429:
+                    msg = "ERROR: Daily API rate limit reached (429)."
                 else:
-                    print(
-                        "ERROR: Daily API rate limit reached. Stopping analysis.", file=sys.stderr
-                    )
+                    msg = f"ERROR: API request failed: {response.status_code} - {response.text[:200]}"
+                
+                if self.retry_count <= self.max_retries and response.status_code == 429:
+                    print(f"{msg} Retrying in 1s... ({self.retry_count}/{self.max_retries})", file=sys.stderr)
+                    time.sleep(1)
+                    return self._rate_limited_get(url, params, quiet)
+                else:
+                    print(msg, file=sys.stderr)
                     self.rate_limit_reached = True
                     return None
 

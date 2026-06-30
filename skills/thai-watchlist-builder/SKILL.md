@@ -7,6 +7,16 @@ description: Auto-build 4 curated watchlists from the Thai SET market (Growth, V
 
 Daily auto-curated watchlists for Thai stocks. Splits the SET universe into 4 actionable buckets based on technical and fundamental criteria — each bucket feeds a different trading style.
 
+> [!CAUTION]
+> **CRITICAL CONSTRAINT: NO LIVE TRADING**
+> This skill is for **analytical purposes ONLY**. Watchlist generation does not constitute trading execution. You are strictly forbidden from connecting to broker APIs.
+
+## Formatting Guidelines
+When presenting watchlists to the user:
+- Use **Emojis** for each bucket category (e.g., 🚀 Growth, 💰 Value, 🔥 Momentum, 🔄 Mean-Reversion).
+- Limit the displayed stocks to the top 3-5 per bucket unless asked otherwise, to prevent chat clutter.
+- Use bold text for Tickers and Scores.
+
 ## When to Use
 
 - Daily morning routine before running deep screeners.

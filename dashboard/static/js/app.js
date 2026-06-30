@@ -1123,38 +1123,40 @@ function setupChartLegend(chart, container, symbol, prices, candleSeries) {
       }
 
       // 7. Confluence Score
-      let bullCount = 0;
-      let bearCount = 0;
-      if (stats.gap.streak > 0 && stats.gap.dir === 1) bullCount++;
-      if (stats.gap.streak > 0 && stats.gap.dir === -1) bearCount++;
-      if (stats.color.streak > 0 && stats.color.dir === 1) bullCount++;
-      if (stats.color.streak > 0 && stats.color.dir === -1) bearCount++;
-      if (stats.pullback) bullCount++;
-      if (stats.breakout) bullCount++;
-      if (stats.volumeSpike && priceData.close > priceData.open) bullCount++;
-      if (stats.volumeDryUp) bullCount++;
-      if (stats.hammer) bullCount++;
-      if (stats.strongClose) bullCount++;
-      if (stats.wideRangeBull) bullCount++;
-      if (stats.wideRangeBear) bearCount++;
-      if (stats.insideDay) bullCount++;
-      if (stats.nr7) bullCount++;
-      if (stats.weeklyTrend.isWeeklyBull) bullCount++;
-      if (stats.rsiDivergence.isBull) bullCount++;
-      if (stats.rsiDivergence.isBear) bearCount++;
-      if (stats.regime.isAbove) bullCount++;
-      else bearCount++;
+      let bullWeight = 0;
+      let bearWeight = 0;
+      if (stats.gap.streak > 0 && stats.gap.dir === 1) bullWeight += 1;
+      if (stats.gap.streak > 0 && stats.gap.dir === -1) bearWeight += 1;
+      if (stats.color.streak > 0 && stats.color.dir === 1) bullWeight += 1;
+      if (stats.color.streak > 0 && stats.color.dir === -1) bearWeight += 1;
+      if (stats.pullback) bullWeight += 1.5;
+      if (stats.breakout) bullWeight += 2;
+      if (stats.volumeSpike) {
+        if (priceData.close > priceData.open) bullWeight += 1.5;
+        else if (priceData.close < priceData.open) bearWeight += 1.5;
+      }
+      if (stats.volumeDryUp) bullWeight += 1;
+      if (stats.hammer) bullWeight += 1.5;
+      if (stats.strongClose) bullWeight += 1;
+      if (stats.wideRangeBull) bullWeight += 1;
+      if (stats.wideRangeBear) bearWeight += 1;
+      // Note: insideDay and nr7 are neutral, so they are not counted towards bull/bear weights.
+      if (stats.weeklyTrend.isWeeklyBull) bullWeight += 1;
+      if (stats.rsiDivergence.isBull) bullWeight += 2;
+      if (stats.rsiDivergence.isBear) bearWeight += 2;
+      if (stats.regime.isAbove) bullWeight += 1;
+      else bearWeight += 1;
 
-      const netScore = bullCount - bearCount;
+      const netScore = bullWeight - bearWeight;
       let confluenceText = "Neutral";
       let confluenceColor = 'var(--text)';
-      if (netScore >= 4) {
+      if (netScore >= 5) {
         confluenceText = "Strong Bullish 🐂";
         confluenceColor = 'var(--green)';
       } else if (netScore >= 1) {
         confluenceText = "Bullish";
         confluenceColor = 'var(--green)';
-      } else if (netScore <= -4) {
+      } else if (netScore <= -5) {
         confluenceText = "Strong Bearish 🐻";
         confluenceColor = 'var(--red)';
       } else if (netScore <= -1) {
@@ -1164,7 +1166,7 @@ function setupChartLegend(chart, container, symbol, prices, candleSeries) {
 
       const confluenceScoreHtml = `<div style="border-top:1px solid rgba(255,255,255,0.15);margin-top:6px;padding-top:6px;display:flex;justify-content:space-between;font-weight:bold">
         <span>Confluence Score:</span>
-        <span style="color:${confluenceColor}">${bullCount}B - ${bearCount}S (Net: ${netScore > 0 ? '+' : ''}${netScore})</span>
+        <span style="color:${confluenceColor}">${bullWeight.toFixed(1)}B - ${bearWeight.toFixed(1)}S (Net: ${netScore > 0 ? '+' : ''}${netScore.toFixed(1)})</span>
       </div>
       <div style="display:flex;justify-content:space-between;color:var(--muted);font-size:10px;margin-bottom:6px">
         <span>Bias assessment:</span>
@@ -1290,6 +1292,10 @@ async function initFavChart(symbol) {
     if (!res.ok) throw new Error('API Error');
     const data = await res.json();
 
+    if (container._resizeObserver) {
+      container._resizeObserver.disconnect();
+      delete container._resizeObserver;
+    }
     container.innerHTML = '';
     container.classList.remove('chart-loading');
     container.classList.add('chart-container');
@@ -1312,6 +1318,7 @@ async function initFavChart(symbol) {
       }
     });
     resizeObserver.observe(container);
+    container._resizeObserver = resizeObserver;
 
     const candleSeries = chart.addCandlestickSeries({
       upColor: '#2ea44f', downColor: '#cf222e', borderUpColor: '#2ea44f',
@@ -2115,6 +2122,10 @@ async function initSwingChart(symbol, plan) {
     const data = await res.json();
     if (data.error) throw new Error(data.error);
 
+    if (container._resizeObserver) {
+      container._resizeObserver.disconnect();
+      delete container._resizeObserver;
+    }
     container.innerHTML = '';
     container.classList.remove('chart-loading');
     container.classList.add('chart-container');
@@ -2137,6 +2148,7 @@ async function initSwingChart(symbol, plan) {
       }
     });
     resizeObserver.observe(container);
+    container._resizeObserver = resizeObserver;
 
     // Candlestick
     const candleSeries = chart.addCandlestickSeries({
@@ -2376,6 +2388,10 @@ async function initCANSLIMChart(symbol) {
     const res = await fetch(`/api/history/${symbol}`);
     const data = await res.json();
     if (data.error) throw new Error(data.error);
+    if (container._resizeObserver) {
+      container._resizeObserver.disconnect();
+      delete container._resizeObserver;
+    }
     container.innerHTML = '';
     container.classList.remove('chart-loading');
     container.classList.add('chart-container');
@@ -2398,6 +2414,7 @@ async function initCANSLIMChart(symbol) {
       }
     });
     resizeObserver.observe(container);
+    container._resizeObserver = resizeObserver;
 
     const candleSeries = chart.addCandlestickSeries({
       upColor:'#00e676', borderUpColor:'#00e676', wickUpColor:'#00e676',
@@ -2648,6 +2665,10 @@ async function initChart(symbol) {
     const res = await fetch(`/api/history/${symbol}`);
     const data = await res.json();
     if (data.error) throw new Error(data.error);
+    if (container._resizeObserver) {
+      container._resizeObserver.disconnect();
+      delete container._resizeObserver;
+    }
     container.innerHTML = '';
     container.classList.remove('chart-loading');
     container.classList.add('chart-container');
@@ -2670,6 +2691,7 @@ async function initChart(symbol) {
       }
     });
     resizeObserver.observe(container);
+    container._resizeObserver = resizeObserver;
 
     // Candlestick series
     const candleSeries = chart.addCandlestickSeries({
@@ -3161,7 +3183,7 @@ function renderPaperOpen(rows) {
     const sym = (r.symbol||'').replace('.BK','');
     const cur = r.market === 'TH' ? '฿' : '$';
     const rColor = (r.unrealized_r||0) > 0 ? 'var(--green)' : (r.unrealized_r||0) < 0 ? 'var(--red)' : 'var(--muted)';
-    const drawdownPct = r.unrealized_r ? (r.unrealized_r * -100) : 0;
+    const drawdownPct = (r.unrealized_r && r.unrealized_r < 0) ? (r.unrealized_r * -100) : 0;
     const warn = drawdownPct >= 50 ? ' 🚨' : drawdownPct >= 25 ? ' ⚠️' : '';
     // Format P/L with proper sign, avoiding "-0" / "+0" cosmetic issues
     const pnl = r.unrealized_pnl || 0;
@@ -3278,6 +3300,10 @@ async function initPaperChart(el) {
       el.innerHTML = '<span style="color:var(--red)">⚠️ ไม่พบกราฟราคา</span>';
       return;
     }
+    if (el._resizeObserver) {
+      el._resizeObserver.disconnect();
+      delete el._resizeObserver;
+    }
     el.innerHTML = '';
     const theme = getChartTheme();
     const chart = LightweightCharts.createChart(el, {
@@ -3317,7 +3343,9 @@ async function initPaperChart(el) {
     setupChartLegend(chart, el, symbol, data, candle);
     chart.timeScale().fitContent();
     // Responsive resize
-    new ResizeObserver(() => chart.applyOptions({ width: el.clientWidth })).observe(el);
+    const resizeObserver = new ResizeObserver(() => chart.applyOptions({ width: el.clientWidth }));
+    resizeObserver.observe(el);
+    el._resizeObserver = resizeObserver;
   } catch (e) {
     el.innerHTML = `<span style="color:var(--red)">⚠️ Chart error: ${e.message}</span>`;
   }
@@ -3433,7 +3461,7 @@ function paperAddPick(symbol, market, entry, stop, target, source, sourceScore, 
   const riskPerShare = Math.abs(entry - stop);
   const rewardPerShare = Math.abs(target - entry);
   const rr = rewardPerShare > 0 && riskPerShare > 0 ? (rewardPerShare/riskPerShare).toFixed(2) : '-';
-  const acctSize = parseFloat(document.getElementById('settingAccount')?.value || 100000);
+  const acctSize = parseFloat(document.getElementById('settingAccount')?.value || 50000);
 
   document.getElementById('paperModalContent').innerHTML = `
     <h2 style="margin-bottom:6px;display:flex;align-items:center;gap:8px">
@@ -3482,7 +3510,7 @@ function _ptUpdateSummary() {
   const totalReward = Math.abs(target - entry) * shares;
   const positionSize = entry * shares;
   const rr = riskPerShare > 0 ? Math.abs(target - entry) / riskPerShare : 0;
-  const acctSize = parseFloat(document.getElementById('settingAccount')?.value || 100000);
+  const acctSize = parseFloat(document.getElementById('settingAccount')?.value || 50000);
   const riskPct = acctSize > 0 ? (totalRisk / acctSize * 100) : 0;
   const riskCol = riskPct <= 1 ? 'var(--green)' : riskPct <= 2 ? 'var(--gold)' : 'var(--red)';
 
