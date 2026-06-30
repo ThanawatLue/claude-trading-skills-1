@@ -1679,7 +1679,25 @@ async function loadData(at) {
     if (at) {
       ts.textContent = `📅 ข้อมูลย้อนหลัง ${at.replace('T',' ')} (${currentMarket})`;
     } else if (RAW_DATA.breadth?.metadata?.generated_at) {
-      ts.textContent = `ข้อมูลตลาด ${currentMarket} ณ ${RAW_DATA.breadth.metadata.generated_at}`;
+      let genAtStr = RAW_DATA.breadth.metadata.generated_at;
+      try {
+        if (!genAtStr.endsWith('Z') && genAtStr.length === 19) {
+          // Legacy format "YYYY-MM-DD HH:MM:SS" which was actually UTC on some servers or Local on others.
+          // We will assume UTC and append Z if it looks like a UTC timestamp that caused 07:50:52 in TH,
+          // but safely, we'll try to parse it first. If it's standard ISO, it handles natively.
+          genAtStr = genAtStr.replace(' ', 'T') + 'Z'; 
+        }
+        const d = new Date(genAtStr);
+        if (!isNaN(d.getTime())) {
+          genAtStr = d.getFullYear() + "-" + 
+                     String(d.getMonth() + 1).padStart(2, '0') + "-" + 
+                     String(d.getDate()).padStart(2, '0') + " " + 
+                     String(d.getHours()).padStart(2, '0') + ":" + 
+                     String(d.getMinutes()).padStart(2, '0') + ":" + 
+                     String(d.getSeconds()).padStart(2, '0');
+        }
+      } catch(e) {}
+      ts.textContent = `ข้อมูลตลาด ${currentMarket} ณ ${genAtStr}`;
     } else {
       ts.textContent = `⚠️ ไม่มีข้อมูลล่าสุดสำหรับตลาด ${currentMarket} — กรุณารัน Fresh Analysis`;
     }

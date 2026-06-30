@@ -259,7 +259,7 @@ def _run_thai_analysis(args):
     latest_r = detail_rows[-1]
     analysis = {
         "metadata": {
-            "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "generated_at": datetime.utcnow().isoformat() + "Z",
             "data_source": "Yahoo Finance (Live SET50 Calculation)",
             "market": "TH",
             "total_stocks": len(histories)
@@ -419,7 +419,7 @@ def _run_us_analysis(args):
 
     analysis = {
         "metadata": {
-            "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "generated_at": datetime.utcnow().isoformat() + "Z",
             "data_source": "TraderMonty Market Breadth CSV",
             "market": "US",
             "detail_url": args.detail_url,

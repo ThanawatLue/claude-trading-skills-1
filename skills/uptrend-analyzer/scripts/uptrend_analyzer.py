@@ -206,7 +206,7 @@ def main():
     # Build full analysis
     analysis = {
         "metadata": {
-            "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "generated_at": datetime.utcnow().isoformat() + "Z",
             "data_source": "Monty's Uptrend Ratio Dashboard (GitHub CSV)",
             "api_key_required": False,
             "latest_data_date": latest_all.get("date", "N/A") if latest_all else "N/A",

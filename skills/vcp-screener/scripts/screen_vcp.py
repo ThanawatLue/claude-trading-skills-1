@@ -807,7 +807,7 @@ def main():
         print()
 
     metadata = {
-        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "generated_at": datetime.utcnow().isoformat() + "Z",
         "market": args.market,
         "universe_description": universe_desc,
         "max_candidates": max_candidates,

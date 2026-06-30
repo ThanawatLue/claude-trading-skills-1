@@ -568,7 +568,7 @@ def main():
     md_file = os.path.join(args.output_dir, f"canslim_screener_{timestamp}.md")
 
     metadata = {
-        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC"),
+        "generated_at": datetime.utcnow().isoformat() + "Z",
         "schema_version": "3.1",
         "phase": "3.1 (7 components - FULL CANSLIM with multi-period RS)",
         "components_included": ["C", "A", "N", "S", "L", "I", "M"],
