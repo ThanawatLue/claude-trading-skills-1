@@ -57,6 +57,19 @@ CREATE TABLE IF NOT EXISTS universe (
     sector     TEXT,
     fetched_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS minute_price_bar (
+    symbol     TEXT NOT NULL,
+    datetime   TEXT NOT NULL,
+    open       REAL,
+    high       REAL,
+    low        REAL,
+    close      REAL,
+    volume     INTEGER,
+    fetched_at TEXT NOT NULL,
+    PRIMARY KEY (symbol, datetime)
+);
+CREATE INDEX IF NOT EXISTS idx_minute_price_symbol_datetime ON minute_price_bar(symbol, datetime DESC);
 """
 
 # After this many days without a full refresh, re-download everything for a
@@ -133,6 +146,58 @@ class CacheManager:
                     (
                         symbol,
                         b["date"],
+                        b.get("open"),
+                        b.get("high"),
+                        b.get("low"),
+                        b.get("close"),
+                        b.get("volume"),
+                        now,
+                    )
+                    for b in bars
+                ],
+            )
+
+    def latest_minute_bar_datetime(self, symbol: str) -> Optional[datetime]:
+        """Return the most recent datetime we have for symbol, or None."""
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT MAX(datetime) AS dt FROM minute_price_bar WHERE symbol = ?", (symbol,)
+            ).fetchone()
+        if row and row["dt"]:
+            try:
+                # Expecting ISO format like '2026-06-30T10:00:00' or similar
+                # Using fromisoformat if it ends with Z/timezone or not
+                dt_str = row["dt"]
+                if dt_str.endswith("Z"):
+                    dt_str = dt_str[:-1]
+                return datetime.fromisoformat(dt_str)
+            except ValueError:
+                return None
+        return None
+
+    def get_minute_bars(self, symbol: str, limit: int = 1000) -> list[dict]:
+        """Return up to `limit` most-recent minute bars, most-recent-first."""
+        with self._conn() as conn:
+            rows = conn.execute(
+                """SELECT datetime, open, high, low, close, volume
+                   FROM minute_price_bar WHERE symbol = ?
+                   ORDER BY datetime DESC LIMIT ?""",
+                (symbol, limit),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def upsert_minute_bars(self, symbol: str, bars: list[dict]) -> None:
+        """Insert or replace minute bars."""
+        now = datetime.utcnow().isoformat()
+        with self._conn() as conn:
+            conn.executemany(
+                """INSERT OR REPLACE INTO minute_price_bar
+                   (symbol, datetime, open, high, low, close, volume, fetched_at)
+                   VALUES (?,?,?,?,?,?,?,?)""",
+                [
+                    (
+                        symbol,
+                        b["datetime"],
                         b.get("open"),
                         b.get("high"),
                         b.get("low"),
