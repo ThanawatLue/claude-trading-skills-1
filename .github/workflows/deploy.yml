@@ -20,12 +20,19 @@ jobs:
           script: |
             # Navigate to project directory
             cd ~/tong_trading
-            
+
             # Pull latest changes from GitHub
             git pull origin main
-            
+
             # Update dependencies using uv
             uv sync
-            
+
+            # Ensure runtime directories and automation scripts are ready
+            mkdir -p logs reports/daily-signal-pipeline state
+            chmod +x scripts/run_gcp_daily_pipeline.sh scripts/setup_gcp_cron.sh
+
+            # Install/update cron jobs for unattended scans and signal pipeline
+            bash scripts/setup_gcp_cron.sh
+
             # Restart the Flask Dashboard service
             sudo systemctl restart dashboard.service

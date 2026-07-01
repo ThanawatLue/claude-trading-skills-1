@@ -170,6 +170,249 @@ h1 {
   margin-bottom: 32px;
 }
 
+.dashboard-tabs {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 12px 0 18px;
+  padding: 6px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  width: fit-content;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.dashboard-tab {
+  min-height: 42px;
+  padding: 9px 16px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.dashboard-tab:hover,
+.dashboard-tab:focus-visible {
+  color: var(--text);
+  border-color: var(--border);
+  outline: none;
+}
+
+.dashboard-tab.active {
+  color: var(--cyan);
+  background: rgba(56, 189, 248, 0.12);
+  border-color: rgba(56, 189, 248, 0.35);
+  box-shadow: var(--active-glow);
+}
+
+.signal-results-title {
+  justify-content: space-between;
+}
+
+.signal-brief-card {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: flex-start;
+  border-left: 4px solid var(--cyan);
+}
+
+.signal-brief-text {
+  color: var(--text);
+  font-size: .95rem;
+  font-weight: 650;
+}
+
+.signal-asof {
+  color: var(--muted);
+  font-size: .76rem;
+  font-family: "JetBrains Mono", monospace;
+  white-space: nowrap;
+}
+
+.signal-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(140px, 1fr));
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.signal-kpi span {
+  display: block;
+  color: var(--text);
+  font-size: 1.35rem;
+  font-weight: 800;
+  font-family: "JetBrains Mono", monospace;
+  line-height: 1.25;
+}
+
+.signal-results-grid {
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.signal-panel-body {
+  color: var(--muted);
+  font-size: .86rem;
+}
+
+.signal-stage-pill,
+.signal-priority-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: .72rem;
+  font-weight: 800;
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.signal-stage-validated { color: var(--green); background: rgba(16, 185, 129, .13); border-color: rgba(16, 185, 129, .35); }
+.signal-stage-calibrating { color: var(--cyan); background: rgba(56, 189, 248, .13); border-color: rgba(56, 189, 248, .35); }
+.signal-stage-collecting { color: var(--gold); background: rgba(251, 191, 36, .13); border-color: rgba(251, 191, 36, .35); }
+.signal-stage-needs_outcomes { color: var(--orange); background: rgba(251, 191, 36, .11); border-color: rgba(251, 191, 36, .32); }
+.signal-stage-not_started { color: var(--muted); background: var(--bg3); }
+
+.signal-priority-P0 { color: var(--red); background: rgba(248, 113, 113, .14); border-color: rgba(248, 113, 113, .36); }
+.signal-priority-P1 { color: var(--gold); background: rgba(251, 191, 36, .13); border-color: rgba(251, 191, 36, .35); }
+.signal-priority-P2 { color: var(--cyan); background: rgba(56, 189, 248, .13); border-color: rgba(56, 189, 248, .35); }
+
+.signal-table td,
+.signal-table th {
+  vertical-align: top;
+}
+
+.signal-rec {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.signal-rec:last-child {
+  border-bottom: 0;
+}
+
+.signal-rec-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-weight: 800;
+  margin-bottom: 4px;
+}
+
+.signal-rec p {
+  margin: 4px 0 0;
+  line-height: 1.45;
+}
+
+@media (max-width: 900px) {
+  .dashboard-header {
+    flex-direction: column;
+  }
+
+  .dashboard-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .dashboard-actions button {
+    flex: 1 1 150px;
+    justify-content: center;
+  }
+
+  .signal-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .signal-brief-card {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 520px) {
+  body {
+    padding: 14px;
+  }
+
+  .dashboard-tabs {
+    width: 100%;
+  }
+
+  .dashboard-tab {
+    flex: 1;
+  }
+
+  .signal-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .signal-table,
+  .signal-table thead,
+  .signal-table tbody,
+  .signal-table tr,
+  .signal-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .signal-table {
+    border: 0;
+  }
+
+  .signal-table thead {
+    display: none;
+  }
+
+  .signal-table tr {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 10px;
+    padding: 6px 10px;
+    background: var(--bg3);
+  }
+
+  .signal-table td {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    border-bottom: 1px solid var(--border);
+    padding: 8px 0;
+    text-align: right;
+  }
+
+  .signal-table td:last-child {
+    border-bottom: 0;
+  }
+
+  .signal-table td::before {
+    color: var(--muted);
+    font-weight: 800;
+    text-align: left;
+  }
+
+  .signal-source-table td:nth-child(1)::before { content: "Source"; }
+  .signal-source-table td:nth-child(2)::before { content: "Signals"; }
+  .signal-source-table td:nth-child(3)::before { content: "Paper"; }
+  .signal-source-table td:nth-child(4)::before { content: "Closed"; }
+  .signal-source-table td:nth-child(5)::before { content: "Win Rate"; }
+  .signal-source-table td:nth-child(6)::before { content: "Expectancy"; }
+  .signal-source-table td:nth-child(7)::before { content: "Stage"; }
+  .signal-source-table td:nth-child(8)::before { content: "Next"; }
+
+  .signal-thesis-table td:nth-child(1)::before { content: "Ticker"; }
+  .signal-thesis-table td:nth-child(2)::before { content: "Source"; }
+  .signal-thesis-table td:nth-child(3)::before { content: "Status"; }
+  .signal-thesis-table td:nth-child(4)::before { content: "Score"; }
+  .signal-thesis-table td:nth-child(5)::before { content: "Grade"; }
+  .signal-thesis-table td:nth-child(6)::before { content: "Review"; }
+}
+
 .score-hero {
   font-size: 3.8rem;
   font-weight: 800;

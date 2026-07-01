@@ -8,17 +8,16 @@ Subcommands:
     stats     Show portfolio statistics
     journal   Add/update journal entry on a trade
 """
+
 from __future__ import annotations
 
 import argparse
 import json
-import os
+import logging
 import sqlite3
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +69,12 @@ STATUS_CLOSED_STOP = "closed_stop"
 STATUS_CLOSED_TARGET = "closed_target"
 STATUS_CLOSED_MANUAL = "closed_manual"
 CLOSED_STATUSES = (STATUS_CLOSED_STOP, STATUS_CLOSED_TARGET, STATUS_CLOSED_MANUAL)
+SOURCE_ALIASES = {
+    "vcp": "vcp-screener",
+    "vcp_screener": "vcp-screener",
+    "canslim": "canslim-screener",
+    "canslim_screener": "canslim-screener",
+}
 
 
 def _db() -> sqlite3.Connection:
@@ -80,50 +85,65 @@ def _db() -> sqlite3.Connection:
     return conn
 
 
+_trade_db = _db
+
+
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec='seconds')
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
     return dict(row)
 
 
+def normalize_source(source: str | None) -> str:
+    value = (source or "manual").strip().lower().replace(" ", "-")
+    return SOURCE_ALIASES.get(value, value)
+
+
 def check_discipline_warnings() -> dict[str, Any]:
     """Check recent trade history for discipline issues (low stop respect, FOMO streak)."""
     with _db() as conn:
         closed = conn.execute(
-            """SELECT status, realized_r, journal_emotion FROM paper_trade 
-               WHERE status != 'open' 
+            """SELECT status, realized_r, journal_emotion FROM paper_trade
+               WHERE status != 'open'
                ORDER BY exit_at DESC LIMIT 5"""
         ).fetchall()
-        
+
     if not closed:
         return {"stop_respect_rate": None, "fomo_streak": False, "warnings": []}
-        
+
     n_stop = sum(1 for r in closed if r["status"] == STATUS_CLOSED_STOP)
-    n_manual_loss = sum(1 for r in closed if r["status"] == STATUS_CLOSED_MANUAL and (r["realized_r"] or 0) < 0)
-    
+    n_manual_loss = sum(
+        1 for r in closed if r["status"] == STATUS_CLOSED_MANUAL and (r["realized_r"] or 0) < 0
+    )
+
     stop_respect = (n_stop / (n_stop + n_manual_loss)) if (n_stop + n_manual_loss) > 0 else None
-    
+
     recent_emotions = [r["journal_emotion"] for r in closed if r["journal_emotion"] is not None]
     fomo_count = sum(1 for e in recent_emotions if e in ("fomo", "greedy", "frustrated"))
     fomo_streak = fomo_count >= 2
-    
+
     warnings = []
     if stop_respect is not None and stop_respect < 0.8:
-        warnings.append(f"Low Stop Respect Rate ({stop_respect:.0%}): You are overriding stops or taking large manual losses. Stick to your stop rules!")
+        warnings.append(
+            f"Low Stop Respect Rate ({stop_respect:.0%}): You are overriding stops or taking large manual losses. Stick to your stop rules!"
+        )
     if fomo_streak:
-        warnings.append("Emotional Risk: Recent trades show FOMO, greed, or frustration. Suggest waiting 24h or reducing position size by 50%.")
-        
+        warnings.append(
+            "Emotional Risk: Recent trades show FOMO, greed, or frustration. Suggest waiting 24h or reducing position size by 50%."
+        )
+
     return {
         "stop_respect_rate": stop_respect,
         "fomo_streak": fomo_streak,
         "recent_emotions": recent_emotions,
-        "warnings": warnings
+        "warnings": warnings,
     }
 
 
 # ── Core actions ────────────────────────────────────────────────────────────
+
 
 def open_position(
     symbol: str,
@@ -164,9 +184,10 @@ def open_position(
         warnings = check_discipline_warnings()["warnings"]
     except Exception as e:
         logger.exception("Error checking discipline warnings from DB")
+        warnings = [f"An error occurred while checking discipline warnings: {e}"]
 
     now = _now_iso()
-    with _db() as conn:
+    with _trade_db() as conn:
         cur = conn.execute(
             """INSERT INTO paper_trade
                (symbol, market, side, status, entry_price, entry_at, shares,
@@ -174,9 +195,29 @@ def open_position(
                 notes_entry, last_price, last_updated, unrealized_pnl, unrealized_r,
                 mae, mfe, journal_emotion, days_held)
                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-            (symbol.upper(), market.upper(), side, STATUS_OPEN, entry, now, shares,
-             stop, target, initial_risk, source, source_score, notes,
-             entry, now, 0.0, 0.0, entry, entry, emotion, 0),
+            (
+                symbol.upper(),
+                market.upper(),
+                side,
+                STATUS_OPEN,
+                entry,
+                now,
+                shares,
+                stop,
+                target,
+                initial_risk,
+                normalize_source(source) if source else None,
+                source_score,
+                notes,
+                entry,
+                now,
+                0.0,
+                0.0,
+                entry,
+                entry,
+                emotion,
+                0,
+            ),
         )
         new_id = cur.lastrowid
         row = conn.execute("SELECT * FROM paper_trade WHERE id=?", (new_id,)).fetchone()
@@ -210,7 +251,9 @@ def close_position(
         side = row["side"]
         entry = row["entry_price"]
         shares = row["shares"]
-        initial_risk_per_share = (entry - row["stop_price"]) if side == "long" else (row["stop_price"] - entry)
+        initial_risk_per_share = (
+            (entry - row["stop_price"]) if side == "long" else (row["stop_price"] - entry)
+        )
 
         if side == "long":
             pnl = (exit_price - entry) * shares
@@ -219,16 +262,29 @@ def close_position(
 
         realized_r = pnl / (initial_risk_per_share * shares) if initial_risk_per_share > 0 else 0
         now = _now_iso()
-        days_held = (datetime.fromisoformat(now).replace(tzinfo=None) - datetime.fromisoformat(row["entry_at"]).replace(tzinfo=None)).days
+        days_held = (
+            datetime.fromisoformat(now).replace(tzinfo=None)
+            - datetime.fromisoformat(row["entry_at"]).replace(tzinfo=None)
+        ).days
 
         # Update MAE/MFE for the exit price too
-        new_mae = min(row["mae"] or exit_price, exit_price) if side == "long" else max(row["mae"] or exit_price, exit_price)
-        new_mfe = max(row["mfe"] or exit_price, exit_price) if side == "long" else min(row["mfe"] or exit_price, exit_price)
+        new_mae = (
+            min(row["mae"] or exit_price, exit_price)
+            if side == "long"
+            else max(row["mae"] or exit_price, exit_price)
+        )
+        new_mfe = (
+            max(row["mfe"] or exit_price, exit_price)
+            if side == "long"
+            else min(row["mfe"] or exit_price, exit_price)
+        )
 
         # Merge notes
         merged_notes = row["journal_text"]
         if notes:
-            merged_notes = (merged_notes + "\n---\n" if merged_notes else "") + f"[EXIT {now}] {notes}"
+            merged_notes = (
+                merged_notes + "\n---\n" if merged_notes else ""
+            ) + f"[EXIT {now}] {notes}"
 
         conn.execute(
             """UPDATE paper_trade
@@ -238,8 +294,21 @@ def close_position(
                    journal_emotion=COALESCE(?, journal_emotion),
                    journal_text=?, days_held=?
                WHERE id=?""",
-            (status, exit_price, now, pnl, realized_r, exit_price, now,
-             new_mae, new_mfe, emotion, merged_notes, days_held, trade_id),
+            (
+                status,
+                exit_price,
+                now,
+                pnl,
+                realized_r,
+                exit_price,
+                now,
+                new_mae,
+                new_mfe,
+                emotion,
+                merged_notes,
+                days_held,
+                trade_id,
+            ),
         )
         out = conn.execute("SELECT * FROM paper_trade WHERE id=?", (trade_id,)).fetchone()
     return _row_to_dict(out)
@@ -289,6 +358,7 @@ def add_journal(trade_id: int, text: str, emotion: str | None = None) -> dict[st
 
 # ── Stats ───────────────────────────────────────────────────────────────────
 
+
 def _score_bucket(score: float | None) -> str:
     """Return a coarse bucket for screener score calibration."""
     if score is None:
@@ -314,9 +384,7 @@ def _group_stats(rows: list[sqlite3.Row]) -> dict[str, Any]:
     avg_win_r = (sum(r["realized_r"] for r in wins) / len(wins)) if wins else 0
     avg_loss_r = (sum(r["realized_r"] for r in losses) / len(losses)) if losses else 0
     expectancy = win_rate * avg_win_r + (1 - win_rate) * avg_loss_r if closed else 0
-    avg_realized_r = (
-        sum((r["realized_r"] or 0) for r in closed) / len(closed)
-    ) if closed else 0
+    avg_realized_r = (sum((r["realized_r"] or 0) for r in closed) / len(closed)) if closed else 0
     avg_score = (sum(r["source_score"] for r in scored) / len(scored)) if scored else None
 
     return {
@@ -366,8 +434,12 @@ def compute_stats(market: str | None = None) -> dict[str, Any]:
 
     n_stop = sum(1 for r in closed if r["status"] == STATUS_CLOSED_STOP)
     n_target = sum(1 for r in closed if r["status"] == STATUS_CLOSED_TARGET)
-    n_manual_loss = sum(1 for r in closed if r["status"] == STATUS_CLOSED_MANUAL and (r["realized_r"] or 0) < 0)
-    n_manual_win = sum(1 for r in closed if r["status"] == STATUS_CLOSED_MANUAL and (r["realized_r"] or 0) > 0)
+    n_manual_loss = sum(
+        1 for r in closed if r["status"] == STATUS_CLOSED_MANUAL and (r["realized_r"] or 0) < 0
+    )
+    n_manual_win = sum(
+        1 for r in closed if r["status"] == STATUS_CLOSED_MANUAL and (r["realized_r"] or 0) > 0
+    )
     stop_respect = (n_stop / (n_stop + n_manual_loss)) if (n_stop + n_manual_loss) else None
 
     # Patience score: did you let winners run? (counts trades where MFE-R > realized_r + 0.5R)
@@ -389,7 +461,9 @@ def compute_stats(market: str | None = None) -> dict[str, Any]:
             eligible += 1
             if mfe_r - (r["realized_r"] or 0) > 0.5:
                 early_cuts += 1
-    patience_score = (1 - early_cuts / eligible) if eligible else None  # 1.0 = perfect, 0 = always cut early
+    patience_score = (
+        (1 - early_cuts / eligible) if eligible else None
+    )  # 1.0 = perfect, 0 = always cut early
 
     # Discipline: avg days held
     avg_days_winners = (sum(r["days_held"] or 0 for r in wins) / len(wins)) if wins else 0
@@ -421,13 +495,14 @@ def compute_stats(market: str | None = None) -> dict[str, Any]:
             "avg_days_held_winners": round(avg_days_winners, 1),
             "avg_days_held_losers": round(avg_days_losers, 1),
         },
-        "by_source": _aggregate_by(rows, lambda r: r["source"] or "manual"),
+        "by_source": _aggregate_by(rows, lambda r: normalize_source(r["source"])),
         "by_score_bucket": _aggregate_by(rows, lambda r: _score_bucket(r["source_score"])),
         "as_of": _now_iso(),
     }
 
 
 # ── CLI ─────────────────────────────────────────────────────────────────────
+
 
 def _print_json(obj):
     print(json.dumps(obj, ensure_ascii=False, indent=2, default=str))
@@ -453,8 +528,7 @@ def main():
     c = sub.add_parser("close")
     c.add_argument("--id", type=int, required=True)
     c.add_argument("--exit-price", type=float, required=True)
-    c.add_argument("--status", default=STATUS_CLOSED_MANUAL,
-                   choices=list(CLOSED_STATUSES))
+    c.add_argument("--status", default=STATUS_CLOSED_MANUAL, choices=list(CLOSED_STATUSES))
     c.add_argument("--emotion", choices=sorted(VALID_EMOTIONS))
     c.add_argument("--notes")
 
@@ -473,13 +547,22 @@ def main():
     args = p.parse_args()
 
     if args.cmd == "open":
-        out = open_position(args.symbol, args.market, args.shares, args.entry,
-                            args.stop, args.target, args.side, args.source,
-                            args.source_score, args.notes, args.emotion)
+        out = open_position(
+            args.symbol,
+            args.market,
+            args.shares,
+            args.entry,
+            args.stop,
+            args.target,
+            args.side,
+            args.source,
+            args.source_score,
+            args.notes,
+            args.emotion,
+        )
         _print_json(out)
     elif args.cmd == "close":
-        out = close_position(args.id, args.exit_price, args.status,
-                             args.emotion, args.notes)
+        out = close_position(args.id, args.exit_price, args.status, args.emotion, args.notes)
         _print_json(out)
     elif args.cmd == "list":
         out = list_positions(args.status, args.market)

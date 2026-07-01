@@ -154,20 +154,17 @@ class FMPClient:
                 if response.status_code == 429:
                     msg = "ERROR: Daily API rate limit reached (429)."
                 else:
-                    msg = f"ERROR: API request failed: {response.status_code} - {response.text[:200]}"
-                
+                    msg = (
+                        f"ERROR: API request failed: {response.status_code} - {response.text[:200]}"
+                    )
+
                 if self.retry_count <= self.max_retries and response.status_code == 429:
                     print(msg, file=sys.stderr)
                 else:
                     print(msg, file=sys.stderr)
-                    
+
                 self.rate_limit_reached = True
                 return None
-                else:
-                    if not quiet:
-                        print("ERROR: Daily API rate limit reached.", file=sys.stderr)
-                    self.rate_limit_reached = True
-                    return None
             else:
                 if not quiet:
                     print(

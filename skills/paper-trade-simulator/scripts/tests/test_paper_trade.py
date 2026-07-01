@@ -1,12 +1,12 @@
-import os
 import gc
+import os
 import sqlite3
-import unittest
 import tempfile
+import unittest
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
-from datetime import datetime, timezone
-import logging
+
 import paper_trade
 import update_marks
 
@@ -17,7 +17,7 @@ class TestPaperTrade(unittest.TestCase):
         self.temp_file = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
         self.test_db = Path(self.temp_file.name)
         self.temp_file.close()
-        
+
         # Patch the database path in the modules
         self.db_path_patcher1 = patch("paper_trade.DB_PATH", self.test_db)
         self.db_path_patcher2 = patch("update_marks.DB_PATH", self.test_db)
@@ -44,7 +44,7 @@ class TestPaperTrade(unittest.TestCase):
             stop=140.0,
             target=170.0,
             notes="Breakout test",
-            emotion="confident"
+            emotion="confident",
         )
         self.assertEqual(res["symbol"], "AAPL")
         self.assertEqual(res["shares"], 10)
@@ -69,7 +69,7 @@ class TestPaperTrade(unittest.TestCase):
             entry=100.0,
             stop=90.0,
             target=120.0,
-            side="long"
+            side="long",
         )
         expected_long_risk = abs(100.0 - 90.0) * 10
         self.assertAlmostEqual(long_pos["initial_risk"], expected_long_risk)
@@ -82,7 +82,7 @@ class TestPaperTrade(unittest.TestCase):
             entry=100.0,
             stop=110.0,
             target=80.0,
-            side="short"
+            side="short",
         )
         expected_short_risk = abs(100.0 - 110.0) * 10
         self.assertAlmostEqual(short_pos["initial_risk"], expected_short_risk)
@@ -90,12 +90,7 @@ class TestPaperTrade(unittest.TestCase):
     def test_close_position(self):
         # Open a long position
         trade = paper_trade.open_position(
-            symbol="AAPL",
-            market="US",
-            shares=10,
-            entry=150.0,
-            stop=140.0,
-            target=170.0
+            symbol="AAPL", market="US", shares=10, entry=150.0, stop=140.0, target=170.0
         )
         trade_id = trade["id"]
 
@@ -105,12 +100,12 @@ class TestPaperTrade(unittest.TestCase):
             exit_price=160.0,
             status="closed_manual",
             emotion="calm",
-            notes="Exited early"
+            notes="Exited early",
         )
         self.assertEqual(res["status"], "closed_manual")
         self.assertEqual(res["exit_price"], 160.0)
         self.assertEqual(res["realized_pnl"], 100.0)  # (160 - 150) * 10
-        self.assertEqual(res["realized_r"], 1.0)       # 100 / ((150 - 140) * 10)
+        self.assertEqual(res["realized_r"], 1.0)  # 100 / ((150 - 140) * 10)
         self.assertRegex(res["exit_at"], r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+\d{2}:\d{2}")
         self.assertIsNotNone(datetime.fromisoformat(res["exit_at"].replace("Z", "+00:00")))
         self.assertRegex(res["last_updated"], r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+\d{2}:\d{2}")
@@ -118,12 +113,7 @@ class TestPaperTrade(unittest.TestCase):
 
     def test_add_journal(self):
         trade = paper_trade.open_position(
-            symbol="MSFT",
-            market="US",
-            shares=5,
-            entry=300.0,
-            stop=280.0,
-            target=340.0
+            symbol="MSFT", market="US", shares=5, entry=300.0, stop=280.0, target=340.0
         )
         trade_id = trade["id"]
 
@@ -134,14 +124,26 @@ class TestPaperTrade(unittest.TestCase):
     def test_stats(self):
         # Create a win and a loss
         t1 = paper_trade.open_position(
-            symbol="AAPL", market="US", shares=10, entry=150.0, stop=140.0, target=170.0,
-            source="vcp", source_score=82
+            symbol="AAPL",
+            market="US",
+            shares=10,
+            entry=150.0,
+            stop=140.0,
+            target=170.0,
+            source="vcp",
+            source_score=82,
         )
         paper_trade.close_position(t1["id"], 160.0, "closed_manual")
 
         t2 = paper_trade.open_position(
-            symbol="MSFT", market="US", shares=10, entry=300.0, stop=290.0, target=330.0,
-            source="vcp", source_score=65
+            symbol="MSFT",
+            market="US",
+            shares=10,
+            entry=300.0,
+            stop=290.0,
+            target=330.0,
+            source="vcp",
+            source_score=65,
         )
         paper_trade.close_position(t2["id"], 290.0, "closed_stop")
 
@@ -150,8 +152,8 @@ class TestPaperTrade(unittest.TestCase):
         self.assertEqual(stats["wins"], 1)
         self.assertEqual(stats["losses"], 1)
         self.assertEqual(stats["win_rate"], 0.5)
-        self.assertEqual(stats["by_source"]["vcp"]["closed_trades"], 2)
-        self.assertEqual(stats["by_source"]["vcp"]["win_rate"], 0.5)
+        self.assertEqual(stats["by_source"]["vcp-screener"]["closed_trades"], 2)
+        self.assertEqual(stats["by_source"]["vcp-screener"]["win_rate"], 0.5)
         self.assertEqual(stats["by_score_bucket"]["70-84"]["closed_trades"], 1)
         self.assertEqual(stats["by_score_bucket"]["50-69"]["closed_trades"], 1)
 
@@ -161,23 +163,23 @@ class TestPaperTrade(unittest.TestCase):
         self.assertIsNone(status["stop_respect_rate"])
         self.assertFalse(status["fomo_streak"])
         self.assertEqual(len(status["warnings"]), 0)
-        
+
         # 1. Low stop respect rate and fomo streak test
         # We need at least 1 closed_stop and closed_manual with loss.
         # Let's open and close 2 manual loss trades with fomo/greedy emotions:
         # stop respect rate = 0 / 2 = 0% < 80% -> should warn
         t1 = paper_trade.open_position("AAPL", "US", 10, 150.0, 140.0, 170.0)
         paper_trade.close_position(t1["id"], 145.0, "closed_manual", emotion="fomo")
-        
+
         t2 = paper_trade.open_position("MSFT", "US", 10, 300.0, 290.0, 330.0)
         paper_trade.close_position(t2["id"], 295.0, "closed_manual", emotion="greedy")
-        
+
         status = paper_trade.check_discipline_warnings()
         self.assertEqual(status["stop_respect_rate"], 0.0)
         self.assertTrue(status["fomo_streak"])
         self.assertIn("Low Stop Respect Rate", status["warnings"][0])
         self.assertIn("Emotional Risk", status["warnings"][1])
-        
+
         # Verify warnings are injected into new position output
         t3 = paper_trade.open_position("GOOG", "US", 10, 100.0, 90.0, 120.0)
         self.assertIn("discipline_warnings", t3)
@@ -186,9 +188,9 @@ class TestPaperTrade(unittest.TestCase):
     def test_check_discipline_warnings_db_error(self):
         with patch("paper_trade._db", side_effect=sqlite3.Error("Mock DB Error")):
             with self.assertLogs("paper_trade", level="ERROR") as cm:
-                warnings = paper_trade.open_position(
-                    "AMZN", "US", 10, 100.0, 90.0, 110.0
-                )["discipline_warnings"]
+                warnings = paper_trade.open_position("AMZN", "US", 10, 100.0, 90.0, 110.0)[
+                    "discipline_warnings"
+                ]
                 self.assertIn("Error checking discipline warnings from DB", cm.output[0])
                 self.assertIn("An error occurred while checking discipline warnings", warnings[0])
 
@@ -196,37 +198,55 @@ class TestPaperTrade(unittest.TestCase):
         # Open and close some trades with vcp source
         # Let's create a negative expectancy: 1 win (+0.5R), 2 losses (-1.0R each)
         t1 = paper_trade.open_position(
-            symbol="AAPL", market="US", shares=10, entry=150.0, stop=140.0, target=170.0,
-            source="vcp-screener"
+            symbol="AAPL",
+            market="US",
+            shares=10,
+            entry=150.0,
+            stop=140.0,
+            target=170.0,
+            source="vcp-screener",
         )
-        paper_trade.close_position(t1["id"], 155.0, "closed_manual") # realized R = +0.5
-        
+        paper_trade.close_position(t1["id"], 155.0, "closed_manual")  # realized R = +0.5
+
         t2 = paper_trade.open_position(
-            symbol="MSFT", market="US", shares=10, entry=300.0, stop=290.0, target=330.0,
-            source="vcp-screener"
+            symbol="MSFT",
+            market="US",
+            shares=10,
+            entry=300.0,
+            stop=290.0,
+            target=330.0,
+            source="vcp-screener",
         )
-        paper_trade.close_position(t2["id"], 290.0, "closed_stop") # realized R = -1.0
-        
+        paper_trade.close_position(t2["id"], 290.0, "closed_stop")  # realized R = -1.0
+
         t3 = paper_trade.open_position(
-            symbol="GOOG", market="US", shares=10, entry=100.0, stop=90.0, target=120.0,
-            source="vcp"
+            symbol="GOOG",
+            market="US",
+            shares=10,
+            entry=100.0,
+            stop=90.0,
+            target=120.0,
+            source="vcp",
         )
-        paper_trade.close_position(t3["id"], 90.0, "closed_stop") # realized R = -1.0
-        
+        paper_trade.close_position(t3["id"], 90.0, "closed_stop")  # realized R = -1.0
+
         # Import screen_vcp dynamically
         import sys
+
         sys_path_backup = sys.path.copy()
         vcp_script_dir = Path(__file__).resolve().parents[4] / "skills" / "vcp-screener" / "scripts"
         sys.path.insert(0, str(vcp_script_dir))
         try:
             import screen_vcp
+
             original_connect = sqlite3.connect
+
             def mock_connect(database, *args, **kwargs):
                 return original_connect(str(self.test_db), *args, **kwargs)
-                
+
             with patch("sqlite3.connect", side_effect=mock_connect):
                 exp, count = screen_vcp.get_recent_expectancy("vcp-screener")
-                
+
             self.assertEqual(count, 3)
             self.assertAlmostEqual(exp, -0.5)
         finally:
@@ -234,39 +254,36 @@ class TestPaperTrade(unittest.TestCase):
 
     def test_update_marks_tradingview_fallback(self):
         # Open a TH paper position
-        t = paper_trade.open_position(
-            symbol="PTT.BK",
-            market="TH",
-            shares=100,
-            entry=30.0,
-            stop=28.0,
-            target=35.0
+        paper_trade.open_position(
+            symbol="PTT.BK", market="TH", shares=100, entry=30.0, stop=28.0, target=35.0
         )
-        
+
         mock_tv_stock = {
             "symbol": "PTT.BK",
             "price": 32.5,
             "volume": 1000000,
-            "average_volume_10d_calc": 1000000
+            "average_volume_10d_calc": 1000000,
         }
-        
+
         from unittest.mock import MagicMock
+
         mock_tv_client = MagicMock()
         mock_tv_client.is_available.return_value = True
         mock_tv_client.get_thai_stocks.return_value = [mock_tv_stock]
-        
+
         import sys
+
         sys.modules["tv_client"] = mock_tv_client
-        
+
         try:
             with patch("update_marks._fetch_price", return_value=None):
                 results = update_marks.update_all()
-                
+
             self.assertEqual(len(results), 1)
             self.assertEqual(results[0]["action"], "marked")
             self.assertEqual(results[0]["price"], 32.5)
             self.assertEqual(results[0]["pnl"], 250.0)
-            
+
             # Check db state
             positions = paper_trade.list_positions(status_filter="open")
             self.assertEqual(positions[0]["last_price"], 32.5)

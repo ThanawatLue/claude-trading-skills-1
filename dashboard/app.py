@@ -10,11 +10,15 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+import yaml
+
 # Load environment variables from .env manually
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
 env_path = os.path.join(BASE_DIR, ".env")
 if os.path.exists(env_path):
-    with open(env_path, "r", encoding="utf-8") as f:
+    with open(env_path, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if not line or line.startswith("#"):
@@ -27,6 +31,8 @@ if os.path.exists(env_path):
 import hf_sync
 import yfinance as yf
 from flask import Flask, Response, jsonify, render_template, request
+
+from scripts import auto_paper, signal_ledger
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(BASE_DIR, "skills", "paper-trade-simulator", "scripts"))
@@ -170,15 +176,15 @@ def latest_file(pattern: str, market: str = "US") -> str | None:
                 data = json.load(j)
                 if isinstance(data, list):
                     return f if market == "US" else None
-                
+
                 # Extract market from metadata
                 meta = data.get("metadata", {})
                 m = meta.get("market")
-                
+
                 # Fallback 1: canslim screening_options
                 if not m:
                     m = meta.get("screening_options", {}).get("market")
-                
+
                 # Fallback 2: breakout_plan input_metadata or symbol suffix
                 if not m:
                     input_meta = data.get("input_metadata", {})
@@ -195,11 +201,11 @@ def latest_file(pattern: str, market: str = "US") -> str | None:
                         m = "TH" if has_th else "US"
                     else:
                         m = input_meta.get("market")
-                
+
                 # Default to US if not resolved
                 if not m:
                     m = "US"
-                
+
                 if m.upper() == market.upper():
                     return f
         except Exception:
@@ -1334,6 +1340,313 @@ def api_db_stats():
 
 
 # ── Paper Trade Simulator ────────────────────────────────────────────────────
+
+
+def _count_files(path: Path, patterns: list[str]) -> int:
+    if not path.exists():
+        return 0
+    total = 0
+    for pattern in patterns:
+        total += len(list(path.glob(pattern)))
+    return total
+
+
+def _read_thesis_summary() -> dict:
+    state_dir = Path(BASE_DIR) / "state" / "theses"
+    summary = {
+        "total": 0,
+        "by_status": {},
+        "by_source": {},
+        "by_type": {},
+        "recent": [],
+    }
+    if not state_dir.exists():
+        return summary
+
+    rows = []
+    for path in sorted(state_dir.glob("th_*.yaml")):
+        try:
+            thesis = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        except (OSError, yaml.YAMLError):
+            continue
+        status = thesis.get("status") or "UNKNOWN"
+        source = signal_ledger.normalize_source((thesis.get("origin") or {}).get("skill"))
+        thesis_type = thesis.get("thesis_type") or "unknown"
+        score = (thesis.get("origin") or {}).get("screening_score")
+        row = {
+            "thesis_id": thesis.get("thesis_id"),
+            "ticker": thesis.get("ticker"),
+            "status": status,
+            "source": source,
+            "thesis_type": thesis_type,
+            "score": score,
+            "grade": (thesis.get("origin") or {}).get("screening_grade"),
+            "created_at": thesis.get("created_at"),
+            "next_review_date": (thesis.get("monitoring") or {}).get("next_review_date"),
+        }
+        rows.append(row)
+        summary["total"] += 1
+        summary["by_status"][status] = summary["by_status"].get(status, 0) + 1
+        summary["by_source"][source] = summary["by_source"].get(source, 0) + 1
+        summary["by_type"][thesis_type] = summary["by_type"].get(thesis_type, 0) + 1
+
+    rows.sort(key=lambda r: r.get("created_at") or "", reverse=True)
+    summary["recent"] = rows[:12]
+    return summary
+
+
+def _read_feedback_files() -> list[dict]:
+    reports_dir = Path(REPORTS_DIR)
+    candidates: list[Path] = []
+    for pattern in ("**/*feedback*.json", "**/*improvement*.json", "**/*backlog*.yaml"):
+        candidates.extend(reports_dir.glob(pattern))
+    items = []
+    for path in sorted(set(candidates), key=lambda p: p.stat().st_mtime, reverse=True)[:10]:
+        items.append(
+            {
+                "name": path.name,
+                "path": str(path.relative_to(Path(BASE_DIR))),
+                "modified_at": datetime.fromtimestamp(path.stat().st_mtime).isoformat(
+                    timespec="seconds"
+                ),
+            }
+        )
+    return items
+
+
+def _normalize_paper_summary_sources(paper_summary: dict) -> dict:
+    by_source = paper_summary.get("by_source") or {}
+    merged: dict[str, dict] = {}
+    for source, stats in by_source.items():
+        normalized = signal_ledger.normalize_source(source)
+        if normalized not in merged:
+            merged[normalized] = dict(stats)
+            continue
+        current = merged[normalized]
+        for key in ("total_trades", "open_positions", "closed_trades", "wins", "losses"):
+            current[key] = int(current.get(key) or 0) + int(stats.get(key) or 0)
+        scored_total = 0.0
+        scored_count = 0
+        for row in (current, stats):
+            score = row.get("avg_source_score")
+            count = int(row.get("total_trades") or 0)
+            if score is not None and count:
+                scored_total += float(score) * count
+                scored_count += count
+        current["avg_source_score"] = (
+            round(scored_total / scored_count, 2) if scored_count else None
+        )
+        closed = int(current.get("closed_trades") or 0)
+        wins = int(current.get("wins") or 0)
+        current["win_rate"] = round(wins / closed, 3) if closed else 0
+    paper_summary["by_source"] = merged
+    return paper_summary
+
+
+def _source_readiness(
+    thesis_summary: dict, paper_summary: dict, ledger_source_metrics: dict | None = None
+) -> list[dict]:
+    ledger_source_metrics = ledger_source_metrics or {}
+    sources = set(thesis_summary.get("by_source", {}).keys())
+    sources.update((paper_summary.get("by_source") or {}).keys())
+    sources.update(ledger_source_metrics.keys())
+    rows = []
+    for source in sorted(sources):
+        paper = (paper_summary.get("by_source") or {}).get(source, {})
+        ledger = ledger_source_metrics.get(source, {})
+        complete_signals = int(ledger.get("complete_signals") or 0)
+        completed_outcomes = int(ledger.get("complete_outcomes") or 0)
+        closed = max(int(paper.get("closed_trades") or 0), complete_signals)
+        paper_total = int(paper.get("total_trades") or 0)
+        thesis_total = int((thesis_summary.get("by_source") or {}).get(source, 0))
+        signal_total = int(ledger.get("signals") or 0)
+        displayed_signals = max(thesis_total, signal_total)
+        horizon_5d = (ledger.get("horizons") or {}).get("5") or {}
+        win_rate = paper.get("win_rate")
+        expectancy_r = paper.get("expectancy_r")
+        if completed_outcomes and (win_rate is None or win_rate == 0):
+            win_rate = horizon_5d.get("win_rate")
+        if completed_outcomes and (expectancy_r is None or expectancy_r == 0):
+            expectancy_r = horizon_5d.get("avg_r")
+        if closed >= 100:
+            stage = "validated"
+            guidance = "ใช้ได้เป็น source หลัก แต่ยังต้อง monitor edge decay"
+        elif closed >= 30:
+            stage = "calibrating"
+            guidance = "เริ่มปรับ weight ได้แบบระวัง"
+        elif closed > 0:
+            stage = "collecting"
+            guidance = "ใช้เพื่อเรียนรู้ก่อน ยังไม่ควรเพิ่ม size"
+        elif paper_total > 0 or thesis_total > 0:
+            stage = "needs_outcomes"
+            guidance = "มี signal แล้ว แต่ยังไม่มี closed outcome"
+        else:
+            stage = "not_started"
+            guidance = "ยังไม่มีข้อมูล"
+        rows.append(
+            {
+                "source": source,
+                "signals": displayed_signals,
+                "ledger_signals": signal_total,
+                "paper_trades": paper_total,
+                "closed_trades": closed,
+                "complete_signals": complete_signals,
+                "completed_outcomes": completed_outcomes,
+                "win_rate": win_rate,
+                "expectancy_r": expectancy_r,
+                "avg_score": paper.get("avg_source_score"),
+                "horizons": ledger.get("horizons", {}),
+                "stage": stage,
+                "guidance": guidance,
+            }
+        )
+    return rows
+
+
+def _improvement_recommendations(
+    thesis_summary: dict,
+    paper_summary: dict,
+    postmortem_count: int,
+    completed_signals: int = 0,
+    auto_paper_summary: dict | None = None,
+) -> list[dict]:
+    recs = []
+    auto_paper_summary = auto_paper_summary or {}
+    closed = int(paper_summary.get("closed_trades") or 0)
+    open_positions = int(paper_summary.get("open_positions") or 0)
+    auto_eligible = int(auto_paper_summary.get("eligible") or 0)
+    if closed == 0 and completed_signals == 0:
+        recs.append(
+            {
+                "priority": "P0",
+                "title": "เริ่มเก็บ closed outcomes อัตโนมัติ",
+                "why": "ตอนนี้ยังไม่มี closed paper trade จึงยังวัด expectancy หรือ win rate จริงไม่ได้",
+                "action": "ให้ daily automation เพิ่ม qualified signals เข้า paper trade และอัปเดต stop/target ทุกวัน",
+            }
+        )
+    elif closed == 0 and completed_signals > 0:
+        recs.append(
+            {
+                "priority": "P1",
+                "title": "แยก forward outcome กับ paper trade outcome",
+                "why": f"มี forward-tested signals {completed_signals} รายการแล้ว แต่ยังไม่มี closed paper trade",
+                "action": "ใช้ forward outcome เพื่อ calibrate signal เบื้องต้น และเริ่ม auto-paper สำหรับสัญญาณรอบใหม่",
+            }
+        )
+    if thesis_summary.get("by_status", {}).get("IDEA", 0) == thesis_summary.get(
+        "total", 0
+    ) and thesis_summary.get("total", 0):
+        recs.append(
+            {
+                "priority": "P0",
+                "title": "ทำทางเดิน IDEA → PAPER/ACTIVE",
+                "why": "thesis ทั้งหมดค้างที่ IDEA ทำให้ learning loop ยังไม่ปิด",
+                "action": "เพิ่ม automation ที่แปลง signal คุณภาพสูงเป็น paper position พร้อม entry/stop/target",
+            }
+        )
+    if auto_eligible == 0:
+        recs.append(
+            {
+                "priority": "P2",
+                "title": "Auto-paper พร้อม แต่รอสัญญาณใหม่",
+                "why": "ยังไม่มี signal สดที่ผ่าน gate: score ≥70 และอายุไม่เกิน 10 วัน",
+                "action": "หลังรัน fresh analysis รอบใหม่ ให้สั่ง auto-paper dry-run อีกครั้งก่อน execute",
+            }
+        )
+    else:
+        recs.append(
+            {
+                "priority": "P1",
+                "title": "มี signal พร้อมเข้า auto-paper",
+                "why": f"พบ {auto_eligible} signals ที่ผ่าน gate สำหรับ paper portfolio",
+                "action": "ตรวจ dry-run แล้วค่อยรัน auto-paper ด้วย --execute เพื่อเริ่มเก็บผล",
+            }
+        )
+    if postmortem_count == 0:
+        recs.append(
+            {
+                "priority": "P1",
+                "title": "เปิด postmortem pipeline",
+                "why": "ยังไม่มี postmortem record สำหรับวิเคราะห์ false positive และ regime mismatch",
+                "action": "ให้ระบบสร้าง postmortem เมื่อ signal ครบ 5D/20D/60D หรือเมื่อ paper trade ปิด",
+            }
+        )
+    if 0 < closed < 30:
+        recs.append(
+            {
+                "priority": "P1",
+                "title": "จำกัดการปรับ weight จนกว่าจะมี sample 30+",
+                "why": f"มี closed trades {closed} รายการ ซึ่งยังน้อยเกินไปสำหรับสรุปความแม่น",
+                "action": "ให้ใช้ผลลัพธ์เป็น warning เท่านั้น ห้ามปรับ rule แรงจาก sample เล็ก",
+            }
+        )
+    if open_positions > 0:
+        recs.append(
+            {
+                "priority": "P2",
+                "title": "ตาม open paper positions ให้ครบ",
+                "why": f"มี open paper positions {open_positions} รายการที่รอ outcome",
+                "action": "กด update marks หรือให้ scheduler เรียก /api/paper/update_marks หลังตลาดปิด",
+            }
+        )
+    return recs
+
+
+@app.route("/api/signal-results")
+def api_signal_results():
+    """Summarize signal/outcome readiness for the dashboard calibration tab."""
+    market = request.args.get("market")
+    try:
+        paper_summary = _normalize_paper_summary_sources(paper_stats(market))
+        thesis_summary = _read_thesis_summary()
+        with signal_ledger.connect(DB_PATH) as conn:
+            ledger_counts = signal_ledger.get_signal_counts(conn, market=market)
+            ledger_sources = signal_ledger.source_metrics(conn, market=market)
+            ledger_outcomes = signal_ledger.outcome_summary(conn, market=market)
+            auto_config = auto_paper.AutoPaperConfig(market=market, dry_run=True)
+            auto_candidates = auto_paper.eligible_signals(conn, auto_config)
+            auto_paper_summary = {
+                "eligible": len(auto_candidates),
+                "candidates": auto_candidates[:5],
+                "config": {
+                    "min_score": auto_config.min_score,
+                    "max_age_days": auto_config.max_age_days,
+                    "max_new_positions": auto_config.max_new_positions,
+                },
+            }
+        postmortem_count = _count_files(
+            Path(REPORTS_DIR) / "postmortems", ["*.json", "*.yaml", "*.md"]
+        )
+        file_signal_count = _count_files(Path(BASE_DIR) / "state" / "signals", ["*.json", "*.yaml"])
+        signal_count = max(file_signal_count, ledger_counts["total"])
+        payload = {
+            "as_of": datetime.now().isoformat(timespec="seconds"),
+            "market": market,
+            "paper": paper_summary,
+            "theses": thesis_summary,
+            "postmortems": {"count": postmortem_count},
+            "signals": {
+                "count": signal_count,
+                "ledger_count": ledger_counts["total"],
+                "file_count": file_signal_count,
+                "completed_signals": ledger_counts["completed_signals"],
+                "by_source": ledger_counts["by_source"],
+            },
+            "outcomes": ledger_outcomes,
+            "auto_paper": auto_paper_summary,
+            "source_readiness": _source_readiness(thesis_summary, paper_summary, ledger_sources),
+            "recommendations": _improvement_recommendations(
+                thesis_summary,
+                paper_summary,
+                postmortem_count,
+                ledger_counts["completed_signals"],
+                auto_paper_summary,
+            ),
+            "feedback_files": _read_feedback_files(),
+        }
+        return jsonify(_clean_nan(payload))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/paper/open", methods=["POST"])

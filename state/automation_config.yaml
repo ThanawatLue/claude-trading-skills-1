@@ -1,0 +1,37 @@
+# Daily signal automation config.
+#
+# Defaults are conservative:
+# - analysis is not triggered unless enabled
+# - auto-paper runs as dry-run unless execute is true
+# - real-money trading is not part of this pipeline
+
+market: TH
+db_path: state/market_cache.db
+theses_dir: state/theses
+signal_files:
+  enabled: true
+  patterns:
+    - state/signals/*.json
+    - state/signals/*.yaml
+    - reports/vcp_screener_*.json
+    - reports/canslim_screener_*.json
+    - reports/thai_swing_*.json
+  max_files_per_pattern: 3
+output_dir: reports/daily-signal-pipeline
+horizons: [5, 20, 60]
+
+analysis:
+  enabled: false
+  url: http://127.0.0.1:5050/api/run
+  timeout_seconds: 900
+
+auto_paper:
+  enabled: true
+  execute: false
+  min_score: 70
+  max_age_days: 10
+  max_new_positions: 3
+  shares: 100
+  derive_missing_risk: true
+  default_stop_pct: 8
+  target_r: 2

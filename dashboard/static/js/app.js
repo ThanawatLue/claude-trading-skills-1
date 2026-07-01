@@ -189,6 +189,7 @@ async function fetchBenchmarkData(m) {
 let VCP_SORT = { col: 'composite_score', dir: -1 };
 let CANSLIM_SORT = { col: 'composite_score', dir: -1 };
 let _canslimResults = [];
+let CURRENT_DASHBOARD_TAB = 'main';
 
 // --- FAVORITES & WATCHLIST JS LOGIC ---
 let _starredStocks = JSON.parse(localStorage.getItem('starred_stocks') || '[]');
@@ -1592,6 +1593,7 @@ async function setMarket(m) {
 
   await refreshHistoryList();
   await loadData();
+  if (CURRENT_DASHBOARD_TAB === 'results') await loadSignalResults();
 }
 
 async function refreshHistoryList() {
@@ -1685,15 +1687,15 @@ async function loadData(at) {
           // Legacy format "YYYY-MM-DD HH:MM:SS" which was actually UTC on some servers or Local on others.
           // We will assume UTC and append Z if it looks like a UTC timestamp that caused 07:50:52 in TH,
           // but safely, we'll try to parse it first. If it's standard ISO, it handles natively.
-          genAtStr = genAtStr.replace(' ', 'T') + 'Z'; 
+          genAtStr = genAtStr.replace(' ', 'T') + 'Z';
         }
         const d = new Date(genAtStr);
         if (!isNaN(d.getTime())) {
-          genAtStr = d.getFullYear() + "-" + 
-                     String(d.getMonth() + 1).padStart(2, '0') + "-" + 
-                     String(d.getDate()).padStart(2, '0') + " " + 
-                     String(d.getHours()).padStart(2, '0') + ":" + 
-                     String(d.getMinutes()).padStart(2, '0') + ":" + 
+          genAtStr = d.getFullYear() + "-" +
+                     String(d.getMonth() + 1).padStart(2, '0') + "-" +
+                     String(d.getDate()).padStart(2, '0') + " " +
+                     String(d.getHours()).padStart(2, '0') + ":" +
+                     String(d.getMinutes()).padStart(2, '0') + ":" +
                      String(d.getSeconds()).padStart(2, '0');
         }
       } catch(e) {}
@@ -2587,7 +2589,7 @@ function renderVCPTable(results) {
       ? `Add to Paper (entry=pivot ${ptEntry.toFixed(2)}, stop=SL ${ptStop.toFixed(2)}, target=${targetR}R)`
       : `Add to Paper (fallback: no pivot yet — entry=current ${ptEntry.toFixed(2)}, stop -8%, target +25%)`;
     const ptBtn = ptEntry > 0
-      ? `<span class="paper-btn" style="background:${ptColor}22;color:${ptColor};border-color:${ptColor}" onclick="event.stopPropagation();paperAddPick('${s.symbol}','${ptMkt}',${ptEntry.toFixed(2)},${ptStop.toFixed(2)},${ptTarget.toFixed(2)},'vcp',${s.composite_score},100)" title="${ptTitle}">📝</span>`
+      ? `<span class="paper-btn" style="background:${ptColor}22;color:${ptColor};border-color:${ptColor}" onclick="event.stopPropagation();paperAddPick('${s.symbol}','${ptMkt}',${ptEntry.toFixed(2)},${ptStop.toFixed(2)},${ptTarget.toFixed(2)},'vcp-screener',${s.composite_score},100)" title="${ptTitle}">📝</span>`
       : '';
     return `
       <tr onclick="toggleRow(${i})" style="cursor:pointer" data-symbol="${s.symbol}">
@@ -3662,6 +3664,233 @@ function paperToast(msg, tone) {
   setTimeout(() => { t.style.opacity = '0'; t.style.transition = 'opacity .3s'; setTimeout(() => t.remove(), 300); }, 3500);
 }
 
+function setDashboardTab(tab) {
+  CURRENT_DASHBOARD_TAB = tab;
+  const main = document.getElementById('mainDashboard');
+  const results = document.getElementById('signalResultsDashboard');
+  const mainTab = document.getElementById('tab-main');
+  const resultsTab = document.getElementById('tab-results');
+  const isResults = tab === 'results';
+  if (main) main.style.display = isResults ? 'none' : '';
+  if (results) results.style.display = isResults ? '' : 'none';
+  if (mainTab) {
+    mainTab.classList.toggle('active', !isResults);
+    mainTab.setAttribute('aria-selected', String(!isResults));
+  }
+  if (resultsTab) {
+    resultsTab.classList.toggle('active', isResults);
+    resultsTab.setAttribute('aria-selected', String(isResults));
+  }
+  localStorage.setItem('dashboardTab', tab);
+  if (isResults) loadSignalResults();
+}
+
+function _srEscape(v) {
+  return String(v ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
+
+function _srPct(v) {
+  if (v === null || v === undefined || Number.isNaN(Number(v))) return '--';
+  return `${(Number(v) * 100).toFixed(0)}%`;
+}
+
+function _srSignedPct(v) {
+  if (v === null || v === undefined || Number.isNaN(Number(v))) return '--';
+  const n = Number(v) * 100;
+  const sign = n > 0 ? '+' : '';
+  return `${sign}${n.toFixed(1)}%`;
+}
+
+function _srR(v) {
+  if (v === null || v === undefined || Number.isNaN(Number(v))) return '--';
+  const n = Number(v);
+  const sign = n > 0 ? '+' : '';
+  return `${sign}${n.toFixed(2)}R`;
+}
+
+function _srNum(v) {
+  if (v === null || v === undefined || Number.isNaN(Number(v))) return '--';
+  return Number(v).toLocaleString();
+}
+
+function _srStageLabel(stage) {
+  const labels = {
+    validated: 'Validated',
+    calibrating: 'Calibrating',
+    collecting: 'Collecting',
+    needs_outcomes: 'Needs Outcomes',
+    not_started: 'Not Started',
+  };
+  const safeStage = _srEscape(stage || 'not_started');
+  return `<span class="signal-stage-pill signal-stage-${safeStage}">${labels[stage] || safeStage}</span>`;
+}
+
+function _srPriorityLabel(priority) {
+  const safe = _srEscape(priority || 'P2');
+  return `<span class="signal-priority-pill signal-priority-${safe}">${safe}</span>`;
+}
+
+function _srSetText(id, text) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = text;
+}
+
+async function loadSignalResults() {
+  const readiness = document.getElementById('signalReadinessText');
+  if (readiness) readiness.textContent = 'Loading signal outcome status...';
+  try {
+    const res = await fetch(`/api/signal-results?market=${encodeURIComponent(currentMarket)}`);
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
+    renderSignalResults(data);
+  } catch (e) {
+    console.error('signal results failed', e);
+    if (readiness) readiness.textContent = `โหลด Signal Results ไม่สำเร็จ: ${e.message}`;
+  }
+}
+
+function renderSignalResults(data) {
+  const paper = data.paper || {};
+  const theses = data.theses || {};
+  const completedSignals = data.signals?.completed_signals || 0;
+  const closed = Math.max(paper.closed_trades || 0, completedSignals);
+  const totalSignals = Math.max(data.signals?.count || 0, theses.total || 0);
+  const enoughForCalibration = closed >= 30;
+  const firstSource = (data.source_readiness || []).find(r => r.completed_outcomes > 0);
+  const first5d = firstSource?.horizons?.['5'];
+  const expectancyText = paper.closed_trades
+    ? _srR(paper.expectancy_r)
+    : first5d
+      ? `${_srSignedPct(first5d.avg_return_pct)} 5D`
+      : _srR(paper.expectancy_r);
+
+  _srSetText('srSignals', _srNum(totalSignals));
+  _srSetText('srOpenPaper', _srNum(paper.open_positions || 0));
+  _srSetText('srClosed', _srNum(closed));
+  _srSetText('srExpectancy', expectancyText);
+  _srSetText('srPostmortems', _srNum(data.postmortems?.count || 0));
+  _srSetText('signalAsOf', `as of ${data.as_of || '--'} | ${data.market || currentMarket}`);
+
+  const readiness = closed === 0
+    ? 'ยังอยู่ช่วงเริ่มเก็บผล: มี candidates แล้ว แต่ยังไม่มี closed outcome สำหรับสรุปความแม่น'
+    : enoughForCalibration
+      ? 'มี sample เริ่มพอสำหรับ calibration ราย source แล้ว'
+      : 'มีผลลัพธ์บางส่วนแล้ว แต่ sample ยังน้อย ควรใช้เป็น warning ก่อน';
+  _srSetText('signalReadinessText', readiness);
+
+  renderSignalMaturity(data);
+  renderSignalRecommendations(data.recommendations || []);
+  renderSignalCoverage(data);
+  renderSignalSourceRows(data.source_readiness || []);
+  renderSignalThesisRows(theses.recent || []);
+}
+
+function renderSignalMaturity(data) {
+  const paper = data.paper || {};
+  const completedSignals = data.signals?.completed_signals || 0;
+  const closed = Math.max(paper.closed_trades || 0, completedSignals);
+  const target = 30;
+  const pct = Math.max(0, Math.min(100, (closed / target) * 100));
+  const firstSource = (data.source_readiness || []).find(r => r.completed_outcomes > 0);
+  const first5d = firstSource?.horizons?.['5'];
+  const html = `
+    <div style="margin-bottom:10px;color:var(--text);font-weight:800">${closed}/${target} closed outcomes for first calibration gate</div>
+    <div class="progress-container" style="margin-bottom:10px"><div class="progress-bar" style="width:${pct}%;background:${closed >= target ? 'var(--green)' : 'var(--gold)'}"></div></div>
+    <div>Win rate: <strong style="color:var(--text)">${paper.closed_trades ? _srPct(paper.win_rate) : _srPct(first5d?.win_rate)}</strong></div>
+    <div>Avg return: <strong style="color:var(--text)">${_srSignedPct(first5d?.avg_return_pct)} 5D</strong></div>
+    <div>Avg win/loss: <strong style="color:var(--green)">${_srR(paper.avg_win_r)}</strong> / <strong style="color:var(--red)">${_srR(paper.avg_loss_r)}</strong></div>
+    <div>Total realized: <strong style="color:var(--text)">${_srR(paper.total_realized_r)}</strong></div>
+  `;
+  const el = document.getElementById('signalMaturityContent');
+  if (el) el.innerHTML = html;
+}
+
+function renderSignalRecommendations(items) {
+  const el = document.getElementById('signalRecommendations');
+  if (!el) return;
+  if (!items.length) {
+    el.innerHTML = '<div style="color:var(--green);font-weight:800">ยังไม่มี issue สำคัญจากข้อมูลปัจจุบัน</div>';
+    return;
+  }
+  el.innerHTML = items.map(item => `
+    <div class="signal-rec">
+      <div class="signal-rec-title">${_srPriorityLabel(item.priority)} <span>${_srEscape(item.title)}</span></div>
+      <p>${_srEscape(item.why)}</p>
+      <p style="color:var(--text)">${_srEscape(item.action)}</p>
+    </div>
+  `).join('');
+}
+
+function renderSignalCoverage(data) {
+  const theses = data.theses || {};
+  const statusRows = Object.entries(theses.by_status || {})
+    .map(([k, v]) => `<div style="display:flex;justify-content:space-between;gap:12px"><span>${_srEscape(k)}</span><strong style="color:var(--text)">${_srNum(v)}</strong></div>`)
+    .join('');
+  const feedbackRows = (data.feedback_files || []).slice(0, 4)
+    .map(f => `<div style="font-size:.78rem;color:var(--muted);margin-top:6px">${_srEscape(f.name)}</div>`)
+    .join('');
+  const html = `
+    <div style="display:grid;gap:7px;margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;gap:12px"><span>Signal files</span><strong style="color:var(--text)">${_srNum(data.signals?.count || 0)}</strong></div>
+      <div style="display:flex;justify-content:space-between;gap:12px"><span>Theses</span><strong style="color:var(--text)">${_srNum(theses.total || 0)}</strong></div>
+      <div style="display:flex;justify-content:space-between;gap:12px"><span>Postmortems</span><strong style="color:var(--text)">${_srNum(data.postmortems?.count || 0)}</strong></div>
+      <div style="display:flex;justify-content:space-between;gap:12px"><span>Auto-paper eligible</span><strong style="color:var(--text)">${_srNum(data.auto_paper?.eligible || 0)}</strong></div>
+      ${statusRows}
+    </div>
+    <div style="border-top:1px solid var(--border);padding-top:10px">
+      <strong style="color:var(--text);font-size:.8rem">Recent feedback files</strong>
+      ${feedbackRows || '<div style="font-size:.78rem;color:var(--muted);margin-top:6px">No feedback files yet</div>'}
+    </div>
+  `;
+  const el = document.getElementById('signalCoverageContent');
+  if (el) el.innerHTML = html;
+}
+
+function renderSignalSourceRows(rows) {
+  const body = document.getElementById('signalSourceRows');
+  if (!body) return;
+  if (!rows.length) {
+    body.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:28px">ยังไม่มี source ให้ประเมิน</td></tr>';
+    return;
+  }
+  body.innerHTML = rows.map(r => `
+    <tr>
+      <td><strong style="color:var(--text)">${_srEscape(r.source)}</strong></td>
+      <td>${_srNum(r.signals)}</td>
+      <td>${_srNum(r.paper_trades)}</td>
+      <td>${_srNum(r.closed_trades)}</td>
+      <td>${_srPct(r.win_rate)}</td>
+      <td style="color:${(r.expectancy_r || r.horizons?.['5']?.avg_return_pct || 0) >= 0 ? 'var(--green)' : 'var(--red)'}">${r.expectancy_r === null || r.expectancy_r === undefined ? _srSignedPct(r.horizons?.['5']?.avg_return_pct) : _srR(r.expectancy_r)}</td>
+      <td>${_srStageLabel(r.stage)}</td>
+      <td style="min-width:220px;color:var(--muted)">${_srEscape(r.guidance)}</td>
+    </tr>
+  `).join('');
+}
+
+function renderSignalThesisRows(rows) {
+  const body = document.getElementById('signalThesisRows');
+  if (!body) return;
+  if (!rows.length) {
+    body.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:28px">ยังไม่มี thesis candidates</td></tr>';
+    return;
+  }
+  body.innerHTML = rows.map(r => `
+    <tr>
+      <td><strong style="color:var(--text)">${_srEscape(r.ticker || '--')}</strong></td>
+      <td>${_srEscape(r.source || '--')}</td>
+      <td>${_srStageLabel((r.status || 'UNKNOWN').toLowerCase() === 'idea' ? 'needs_outcomes' : 'collecting')} <span style="margin-left:6px">${_srEscape(r.status || '--')}</span></td>
+      <td>${r.score === null || r.score === undefined ? '--' : Number(r.score).toFixed(1)}</td>
+      <td>${_srEscape(r.grade || '--')}</td>
+      <td>${_srEscape(r.next_review_date || '--')}</td>
+    </tr>
+  `).join('');
+}
+
 window.onload = async () => {
   loadSettings();
   // Sync market toggle button visual state with loaded currentMarket
@@ -3676,6 +3905,9 @@ window.onload = async () => {
   await refreshHistoryList();
   await loadData();
   await paperRefresh();
+  const savedTab = localStorage.getItem('dashboardTab') || 'main';
+  if (savedTab === 'results') setDashboardTab('results');
+  else loadSignalResults();
 };
 
 async function openPatternScreener() {
