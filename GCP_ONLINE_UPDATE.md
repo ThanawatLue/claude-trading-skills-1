@@ -34,6 +34,8 @@ This means the VM should receive both dashboard updates and cron automation upda
 ## Cron Jobs Installed On GCP
 
 The cron setup script now keeps the original dashboard scans and adds follow-up daily signal pipeline jobs.
+The managed cron block is installed with `CRON_TZ=Asia/Bangkok`, so the times below are Bangkok time regardless of the VM's system timezone.
+Each deploy replaces the managed block to prevent stale or duplicate automation jobs.
 
 TH market:
 

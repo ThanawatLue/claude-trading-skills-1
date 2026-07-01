@@ -535,3 +535,20 @@ Fix added:
 - Optional service override: `GCP_DASHBOARD_SERVICE`.
 
 This should allow a fresh or partially configured GCP VM to become usable after a push to `main`.
+
+## Implementation Update: Cron Timezone Fix
+
+Cron setup now installs the trading automation inside a managed block:
+
+- `CRON_TZ=Asia/Bangkok`
+- old unmanaged TH/US automation lines are removed before writing the new block
+- future deploys replace the managed block instead of adding duplicate jobs
+
+Current scheduled times are Bangkok time:
+
+```text
+TH scan:      10:15, 16:15 Mon-Fri
+TH pipeline:  10:45, 16:45 Mon-Fri
+US scan:      20:30 Mon-Fri
+US pipeline:  21:00 Mon-Fri
+```

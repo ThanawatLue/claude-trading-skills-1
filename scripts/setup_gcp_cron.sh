@@ -9,6 +9,7 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 echo "=== TRADING INTELLIGENCE AUTOMATION SETUP ==="
 echo "This script configures crontab jobs on this GCP VM."
 echo "It runs dashboard scans first, then the signal ledger / auto-paper dry-run pipeline."
+echo "Cron timezone is fixed to Asia/Bangkok."
 echo "================================================"
 
 # Dashboard scan jobs. Assumes dashboard.service exposes Flask on localhost:5050.
@@ -21,48 +22,46 @@ CRON_TH_PIPE_MORN="45 10 * * 1-5 cd \"$PROJECT_ROOT\" && bash scripts/run_gcp_da
 CRON_TH_PIPE_EVE="45 16 * * 1-5 cd \"$PROJECT_ROOT\" && bash scripts/run_gcp_daily_pipeline.sh TH"
 CRON_US_PIPE="0 21 * * 1-5 cd \"$PROJECT_ROOT\" && bash scripts/run_gcp_daily_pipeline.sh US"
 
-TMP_CRON=$(mktemp)
-crontab -l > "$TMP_CRON" 2>/dev/null || true
+CURRENT_CRON=$(mktemp)
+CLEAN_CRON=$(mktemp)
 
-modified=0
+cleanup() {
+    rm -f "$CURRENT_CRON" "$CLEAN_CRON"
+}
+trap cleanup EXIT
 
-if ! grep -q "api/run?market=TH" "$TMP_CRON"; then
-    echo "" >> "$TMP_CRON"
-    echo "# Automated Trading Intelligence Scans (TH Market)" >> "$TMP_CRON"
-    echo "$CRON_TH_MORN" >> "$TMP_CRON"
-    echo "$CRON_TH_EVE" >> "$TMP_CRON"
-    modified=1
-fi
+crontab -l > "$CURRENT_CRON" 2>/dev/null || true
 
-if ! grep -q "run_gcp_daily_pipeline.sh TH" "$TMP_CRON"; then
-    echo "" >> "$TMP_CRON"
-    echo "# Automated Signal Ledger / Auto-paper Dry-run Pipeline (TH Market)" >> "$TMP_CRON"
-    echo "$CRON_TH_PIPE_MORN" >> "$TMP_CRON"
-    echo "$CRON_TH_PIPE_EVE" >> "$TMP_CRON"
-    modified=1
-fi
+# Replace the managed block and remove older unmanaged versions of these jobs.
+awk '
+    $0 == "# BEGIN TONG_TRADING_AUTOMATION" { skip = 1; next }
+    $0 == "# END TONG_TRADING_AUTOMATION" { skip = 0; next }
+    skip { next }
+    /Automated Trading Intelligence Scans/ { next }
+    /Automated Signal Ledger \/ Auto-paper Dry-run Pipeline/ { next }
+    /api\/run\?market=(TH|US)/ { next }
+    /run_gcp_daily_pipeline\.sh (TH|US)/ { next }
+    { print }
+' "$CURRENT_CRON" > "$CLEAN_CRON"
 
-if ! grep -q "api/run?market=US" "$TMP_CRON"; then
-    echo "" >> "$TMP_CRON"
-    echo "# Automated Trading Intelligence Scans (US Market)" >> "$TMP_CRON"
-    echo "$CRON_US_SCAN" >> "$TMP_CRON"
-    modified=1
-fi
+{
+    echo ""
+    echo "# BEGIN TONG_TRADING_AUTOMATION"
+    echo "CRON_TZ=Asia/Bangkok"
+    echo "# Automated Trading Intelligence Scans (TH Market)"
+    echo "$CRON_TH_MORN"
+    echo "$CRON_TH_EVE"
+    echo "# Automated Signal Ledger / Auto-paper Dry-run Pipeline (TH Market)"
+    echo "$CRON_TH_PIPE_MORN"
+    echo "$CRON_TH_PIPE_EVE"
+    echo "# Automated Trading Intelligence Scans (US Market)"
+    echo "$CRON_US_SCAN"
+    echo "# Automated Signal Ledger / Auto-paper Dry-run Pipeline (US Market)"
+    echo "$CRON_US_PIPE"
+    echo "# END TONG_TRADING_AUTOMATION"
+} >> "$CLEAN_CRON"
 
-if ! grep -q "run_gcp_daily_pipeline.sh US" "$TMP_CRON"; then
-    echo "" >> "$TMP_CRON"
-    echo "# Automated Signal Ledger / Auto-paper Dry-run Pipeline (US Market)" >> "$TMP_CRON"
-    echo "$CRON_US_PIPE" >> "$TMP_CRON"
-    modified=1
-fi
-
-if [ "$modified" -eq 1 ]; then
-    crontab "$TMP_CRON"
-    echo "Cron jobs successfully installed."
-    echo "Current crontab configuration:"
-    crontab -l
-else
-    echo "Cron jobs are already configured in crontab."
-fi
-
-rm "$TMP_CRON"
+crontab "$CLEAN_CRON"
+echo "Cron jobs successfully installed or updated."
+echo "Current crontab configuration:"
+crontab -l
