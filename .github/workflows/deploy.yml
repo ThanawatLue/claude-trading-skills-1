@@ -17,22 +17,83 @@ jobs:
           host: ${{ secrets.GCP_HOST }}
           username: ${{ secrets.GCP_USERNAME }}
           key: ${{ secrets.GCP_SSH_KEY }}
+          script_stop: true
           script: |
-            # Navigate to project directory
-            cd ~/tong_trading
+            set -euo pipefail
 
-            # Pull latest changes from GitHub
-            git pull origin main
+            export PATH="$HOME/.local/bin:$HOME/.cargo/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 
-            # Update dependencies using uv
+            PROJECT_DIR_INPUT='${{ secrets.GCP_PROJECT_DIR }}'
+            DASHBOARD_SERVICE_INPUT='${{ secrets.GCP_DASHBOARD_SERVICE }}'
+            REPO_URL='https://github.com/${{ github.repository }}.git'
+
+            PROJECT_DIR="${PROJECT_DIR_INPUT:-}"
+            if [ -z "$PROJECT_DIR" ]; then
+              for candidate in "$HOME/tong_trading" "$HOME/claude-trading-skills-1" "$HOME/claude-trading-skills"; do
+                if [ -d "$candidate/.git" ]; then
+                  PROJECT_DIR="$candidate"
+                  break
+                fi
+              done
+            fi
+            if [ -z "$PROJECT_DIR" ]; then
+              PROJECT_DIR="$HOME/claude-trading-skills-1"
+            fi
+
+            if [ -e "$PROJECT_DIR" ] && [ ! -d "$PROJECT_DIR/.git" ]; then
+              echo "Deployment path exists but is not a git repository: $PROJECT_DIR"
+              exit 1
+            fi
+
+            if [ ! -d "$PROJECT_DIR/.git" ]; then
+              mkdir -p "$(dirname "$PROJECT_DIR")"
+              git clone "$REPO_URL" "$PROJECT_DIR"
+            fi
+
+            cd "$PROJECT_DIR"
+
+            git fetch origin main
+            git checkout main
+            git pull --ff-only origin main
+
+            if ! command -v uv >/dev/null 2>&1; then
+              curl -LsSf https://astral.sh/uv/install.sh | sh
+              export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+            fi
+
             uv sync
 
-            # Ensure runtime directories and automation scripts are ready
             mkdir -p logs reports/daily-signal-pipeline state
             chmod +x scripts/run_gcp_daily_pipeline.sh scripts/setup_gcp_cron.sh
 
-            # Install/update cron jobs for unattended scans and signal pipeline
             bash scripts/setup_gcp_cron.sh
 
-            # Restart the Flask Dashboard service
-            sudo systemctl restart dashboard.service
+            SERVICE_NAME="${DASHBOARD_SERVICE_INPUT:-dashboard.service}"
+            if command -v systemctl >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+              if ! systemctl cat "$SERVICE_NAME" >/dev/null 2>&1; then
+                sudo tee "/etc/systemd/system/$SERVICE_NAME" >/dev/null <<SERVICE
+            [Unit]
+            Description=Tong Trading Dashboard
+            After=network-online.target
+            Wants=network-online.target
+
+            [Service]
+            Type=simple
+            User=$USER
+            WorkingDirectory=$PROJECT_DIR
+            Environment=PYTHONUNBUFFERED=1
+            EnvironmentFile=-$PROJECT_DIR/.env
+            ExecStart=$PROJECT_DIR/.venv/bin/python dashboard/app.py
+            Restart=always
+            RestartSec=10
+
+            [Install]
+            WantedBy=multi-user.target
+            SERVICE
+                sudo systemctl daemon-reload
+                sudo systemctl enable "$SERVICE_NAME"
+              fi
+              sudo systemctl restart "$SERVICE_NAME"
+            else
+              echo "systemd or passwordless sudo is unavailable; skipping dashboard service restart."
+            fi

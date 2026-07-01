@@ -17,15 +17,17 @@ Changed files:
 When code is pushed to `main`, GitHub Actions now:
 
 1. SSHs into the GCP VM.
-2. Runs `git pull origin main`.
-3. Runs `uv sync`.
-4. Creates runtime folders:
+2. Finds the project checkout from `GCP_PROJECT_DIR`, `~/tong_trading`, `~/claude-trading-skills-1`, or `~/claude-trading-skills`.
+3. Clones the repo into `~/claude-trading-skills-1` if no checkout exists yet.
+4. Pulls the latest `main` branch.
+5. Installs `uv` if it is missing from the VM PATH, then runs `uv sync`.
+6. Creates runtime folders:
    - `logs/`
    - `reports/daily-signal-pipeline/`
    - `state/`
-5. Makes automation scripts executable.
-6. Runs `bash scripts/setup_gcp_cron.sh`.
-7. Restarts `dashboard.service`.
+7. Makes automation scripts executable.
+8. Runs `bash scripts/setup_gcp_cron.sh`.
+9. Creates `dashboard.service` if missing, then restarts it.
 
 This means the VM should receive both dashboard updates and cron automation updates after a successful push.
 
@@ -102,7 +104,7 @@ sudo journalctl -u dashboard.service -n 100 --no-pager
 After pushing this update, check these on the GCP VM:
 
 ```bash
-cd ~/tong_trading
+cd ~/claude-trading-skills-1
 git pull origin main
 bash scripts/setup_gcp_cron.sh
 crontab -l
@@ -112,7 +114,7 @@ sudo systemctl status dashboard.service
 Manual dry-run test:
 
 ```bash
-cd ~/tong_trading
+cd ~/claude-trading-skills-1
 bash scripts/run_gcp_daily_pipeline.sh TH
 tail -n 80 logs/daily_signal_pipeline_TH.log
 ```
@@ -127,6 +129,13 @@ GCP_USERNAME
 GCP_SSH_KEY
 ```
 
+Optional repository secrets:
+
+```text
+GCP_PROJECT_DIR          use this if the VM checkout is not in a default path
+GCP_DASHBOARD_SERVICE    use this if the service name is not dashboard.service
+```
+
 The VM should have any required runtime environment variables for dashboard/data sync:
 
 ```text
@@ -138,6 +147,6 @@ FINVIZ_API_KEY   optional
 
 ## Current Limitation
 
-This update prepares unattended GCP operation, but I cannot verify the live VM from this local workspace because SSH credentials and GitHub secrets are not available here.
+The first live deployment attempt found that `~/tong_trading` did not exist on the VM and `dashboard.service` was not installed. The deployment workflow now handles those cases automatically.
 
 Verification should be done after pushing to `main` by checking GitHub Actions and VM cron logs.

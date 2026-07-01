@@ -512,3 +512,26 @@ tail -n 80 logs/daily_signal_pipeline_TH.log
 หมายเหตุ:
 
 ผมตรวจ live GCP VM จากเครื่องนี้ไม่ได้ เพราะไม่มี SSH credentials / GitHub secrets ใน workspace นี้ ต้องดูผลจริงหลัง push ผ่าน GitHub Actions และ log บน VM
+
+## Implementation Update: GCP Deploy Fix
+
+Observed live GitHub Actions failure:
+
+- `cd ~/tong_trading` failed because that path did not exist on the VM.
+- `uv` was not available in the SSH PATH after the failed `cd`.
+- `dashboard.service` did not exist yet.
+
+Fix added:
+
+- `.github/workflows/deploy.yml` now stops on the first deployment error.
+- It resolves the project directory from:
+  1. `GCP_PROJECT_DIR` secret
+  2. `~/tong_trading`
+  3. `~/claude-trading-skills-1`
+  4. `~/claude-trading-skills`
+- If no checkout exists, it clones the repo into `~/claude-trading-skills-1`.
+- It installs `uv` on the VM if missing.
+- It creates `dashboard.service` if missing, then restarts it.
+- Optional service override: `GCP_DASHBOARD_SERVICE`.
+
+This should allow a fresh or partially configured GCP VM to become usable after a push to `main`.
